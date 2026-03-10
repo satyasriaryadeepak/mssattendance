@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Home - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<header class="site-header">
+    <div class="logo-wrap">
+        <div class="logo-badge">MS</div>
+        <div>
+            <h2>MSSquare Technologies</h2>
+            <p>Employee Attendance System</p>
+        </div>
+    </div>
+
+    <nav class="site-nav">
+        <a href="/employee/home" class="active-link">Home</a>
+        <a href="/employee/attendance">Attendance</a>
+        <a href="/employee/profile">My Profile</a>
+        <a href="/employee/contact">Contact Us</a>
+        <a href="/logout">Logout</a>
+    </nav>
+</header>
+
+<section class="hero-section">
+    <div class="hero-text">
+        <span class="hero-tag">Modern Employee Portal</span>
+        <h1>Welcome, {{ employee_name }}</h1>
+        <p>
+            Manage your attendance, view your profile, and stay updated with company timings
+            through a clean and modern dashboard.
+        </p>
+
+        <div class="hero-buttons">
+            <a href="/employee/attendance" class="primary-btn">Mark Attendance</a>
+            <a href="/employee/profile" class="secondary-btn">View Profile</a>
+        </div>
+    </div>
+
+    <div class="hero-panel">
+        <div class="hero-stat-card">
+            <span>Employee ID</span>
+            <h3>{{ employee_id }}</h3>
+        </div>
+
+        <div class="hero-stat-card">
+            <span>Office Timing</span>
+            <h3>10 AM - 6 PM</h3>
+        </div>
+
+        <div class="hero-stat-card">
+            <span>Break Time</span>
+            <h3>1 PM - 2 PM</h3>
+        </div>
+
+        <div class="hero-stat-card">
+            <span>Live Time</span>
+            <h3 id="clock">--:--:--</h3>
+        </div>
+    </div>
+</section>
+
+<section class="info-section">
+    <div class="info-card">
+        <h3>Morning Attendance</h3>
+        <p>Mark your morning attendance before <b>10:10 AM</b>.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>Afternoon Attendance</h3>
+        <p>Mark your afternoon attendance before <b>2:10 PM</b>.</p>
+    </div>
+
+    <div class="info-card">
+        <h3>Attendance Rule</h3>
+        <p>If both are marked you are <b>Present</b>. If one or both are missed you are <b>Absent</b>.</p>
+    </div>
+</section>
+
+<section class="quick-section">
+    <div class="quick-box">
+        <h2>Quick Access</h2>
+        <div class="quick-grid">
+            <a href="/employee/attendance" class="quick-link">Go to Attendance</a>
+            <a href="/employee/profile" class="quick-link">Open My Profile</a>
+            <a href="/employee/contact" class="quick-link">Contact Support</a>
+        </div>
+    </div>
+</section>
+
+<footer class="site-footer">
+    <p>© 2026 MSSquare Technologies • Employee Attendance Management System</p>
+</footer>
+
+<script>
+function updateClock() {
+    const now = new Date();
+    document.getElementById("clock").innerHTML = now.toLocaleTimeString();
+}
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+
+</body>
+</html>

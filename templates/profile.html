@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="home-page">
+
+<header class="site-header">
+    <div class="logo-wrap">
+        <div class="logo-badge">MS</div>
+        <div>
+            <h2>MSSquare Technologies</h2>
+            <p>Employee Attendance System</p>
+        </div>
+    </div>
+
+    <nav class="site-nav">
+        <a href="/employee/home">Home</a>
+        <a href="/employee/attendance">Attendance</a>
+        <a href="/employee/profile" class="active-link">My Profile</a>
+        <a href="/employee/contact">Contact</a>
+        <a href="/logout">Logout</a>
+    </nav>
+</header>
+
+<div class="home-content">
+
+    <section class="attendance-top-section">
+        <div class="attendance-top-grid">
+
+            <div class="attendance-dark-box">
+                <span>Employee Name</span>
+                <h3>{{ employee.name }}</h3>
+            </div>
+
+            <div class="attendance-dark-box">
+                <span>Employee ID</span>
+                <h3>{{ employee.employee_id }}</h3>
+            </div>
+
+            <div class="attendance-dark-box">
+                <span>Attendance %</span>
+                <h3>{{ percentage }}%</h3>
+            </div>
+
+            <div class="attendance-dark-box">
+                <span>Department</span>
+                <h3>{{ employee.department }}</h3>
+            </div>
+
+        </div>
+    </section>
+
+    <section class="attendance-full-section">
+        <span class="hero-tag">My Profile</span>
+        <h1>Attendance Records</h1>
+        <p>
+            View your profile details, attendance percentage, and daily attendance history.
+        </p>
+    </section>
+
+    <section class="attendance-rules-landscape">
+        <div class="rules-header">
+            <h3>Attendance Record Table</h3>
+            <p>Your attendance history is shown below.</p>
+        </div>
+
+        <div class="table-wrap">
+            <table class="modern-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Morning</th>
+                        <th>Afternoon</th>
+                        <th>Status</th>
+                        <th>Logout Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in records %}
+                    <tr>
+                        <td>{{ row.date }}</td>
+                        <td>
+                            {% if row.morning == 1 %}
+                                Marked
+                            {% else %}
+                                Not Marked
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.afternoon == 1 %}
+                                Marked
+                            {% else %}
+                                Not Marked
+                            {% endif %}
+                        </td>
+                        <td>{{ row.status }}</td>
+                        <td>{{ row.logout_time }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+</div>
+
+<footer class="site-footer">
+    © 2026 MSSquare Technologies • Employee Attendance Management System
+</footer>
+
+</body>
+</html>

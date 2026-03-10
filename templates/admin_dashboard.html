@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="panel-body">
+
+<div class="panel-layout">
+    <aside class="panel-sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo">MS</div>
+            <div>
+                <h2>MSSquare</h2>
+                <p>Technologies</p>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="active">Dashboard</a>
+            <a href="/admin/employees">Employees</a>
+            <a href="/admin/reports">Reports</a>
+            <a href="/logout">Logout</a>
+        </nav>
+    </aside>
+
+    <main class="panel-main">
+        <div class="panel-topbar">
+            <div>
+                <h1>Admin Dashboard</h1>
+                <p>Employee Attendance Management System</p>
+            </div>
+        </div>
+
+        <section class="stats-grid">
+            <div class="glass-card stat-card">
+                <span>Total Employees</span>
+                <h2>{{ total_employees }}</h2>
+            </div>
+
+            <div class="glass-card stat-card">
+                <span>Present Today</span>
+                <h2>{{ present_today }}</h2>
+            </div>
+
+            <div class="glass-card stat-card">
+                <span>Absent Today</span>
+                <h2>{{ absent_today }}</h2>
+            </div>
+        </section>
+
+        <section class="grid-2">
+            <div class="glass-card">
+                <h3>Quick Actions</h3>
+                <div class="action-list">
+                    <a class="primary-btn" href="/admin/employees">Manage Employees</a>
+                    <a class="primary-btn" href="/admin/reports">Attendance Reports</a>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <h3>Company Attendance Rules</h3>
+                <ul class="clean-list">
+                    <li>Office timing: <b>10:00 AM to 6:00 PM</b></li>
+                    <li>Break timing: <b>1:00 PM to 2:00 PM</b></li>
+                    <li>Morning mark before <b>10:10 AM</b></li>
+                    <li>Afternoon mark before <b>2:10 PM</b></li>
+                    <li>Both marks done = <b>Present</b></li>
+                    <li>One or both missed = <b>Absent</b></li>
+                </ul>
+            </div>
+        </section>
+
+        <footer class="panel-footer">
+            © 2026 MSSquare Technologies • Employee Attendance Management System
+        </footer>
+    </main>
+</div>
+
+</body>
+</html>

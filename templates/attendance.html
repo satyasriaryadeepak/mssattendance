@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="home-page">
+
+<header class="site-header">
+    <div class="logo-wrap">
+        <div class="logo-badge">MS</div>
+        <div>
+            <h2>MSSquare Technologies</h2>
+            <p>Employee Attendance System</p>
+        </div>
+    </div>
+
+    <nav class="site-nav">
+        <a href="/employee/home">Home</a>
+        <a href="/employee/attendance" class="active-link">Attendance</a>
+        <a href="/employee/profile">My Profile</a>
+        <a href="/employee/contact">Contact</a>
+        <a href="/logout">Logout</a>
+    </nav>
+</header>
+
+<div class="home-content">
+
+    <!-- TOP 4 BOXES -->
+    <section class="attendance-top-section">
+        <div class="attendance-top-grid">
+
+            <div class="attendance-dark-box">
+                <span>Morning Status</span>
+                <h3>
+                    {% if record and record.morning == 1 %}
+                        Marked
+                    {% else %}
+                        Not Marked
+                    {% endif %}
+                </h3>
+            </div>
+
+            <div class="attendance-dark-box">
+                <span>Afternoon Status</span>
+                <h3>
+                    {% if record and record.afternoon == 1 %}
+                        Marked
+                    {% else %}
+                        Not Marked
+                    {% endif %}
+                </h3>
+            </div>
+
+            <div class="attendance-dark-box">
+                <span>Final Status</span>
+                <h3>
+                    {% if record %}
+                        {{ record.status }}
+                    {% else %}
+                        Pending
+                    {% endif %}
+                </h3>
+            </div>
+
+            <div class="attendance-dark-box">
+                <span>Live Time</span>
+                <h3 id="clock">--:--:--</h3>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- FULL MAIN SECTION -->
+    <section class="attendance-full-section">
+        <span class="hero-tag">Attendance Portal</span>
+        <h1>Mark Your Attendance</h1>
+        <p>
+            Mark your morning and afternoon attendance based on company timing rules.
+            Real-time status is shown below.
+        </p>
+
+        <div class="attendance-buttons-row">
+            <form method="POST" action="/employee/mark_attendance">
+                <input type="hidden" name="period" value="morning">
+                <button class="primary-btn attendance-full-btn" type="submit">Mark Morning Attendance</button>
+            </form>
+
+            <form method="POST" action="/employee/mark_attendance">
+                <input type="hidden" name="period" value="afternoon">
+                <button class="secondary-btn attendance-full-btn" type="submit">Mark Afternoon Attendance</button>
+            </form>
+            <a href="/logout" class="logout-attendance-btn">Logout</a>
+        </div>
+
+        {% if msg %}
+        <div class="attendance-full-message">
+            {{ msg }}
+        </div>
+        {% endif %}
+    </section>
+
+    <!-- RULES -->
+    <section class="attendance-rules-landscape">
+        <div class="rules-header">
+            <h3>Attendance Rules</h3>
+            <p>Follow company timing guidelines for valid attendance marking.</p>
+        </div>
+
+        <div class="rules-grid">
+            <div class="rule-item">
+                <span>Office Time</span>
+                <h4>10:00 AM - 6:00 PM</h4>
+            </div>
+
+            <div class="rule-item">
+                <span>Break Time</span>
+                <h4>1:00 PM - 2:00 PM</h4>
+            </div>
+
+            <div class="rule-item">
+                <span>Morning Deadline</span>
+                <h4>Before 10:10 AM</h4>
+            </div>
+
+            <div class="rule-item">
+                <span>Afternoon Deadline</span>
+                <h4>Before 2:10 PM</h4>
+            </div>
+
+            <div class="rule-item">
+                <span>If Both Marked</span>
+                <h4>Present</h4>
+            </div>
+
+            <div class="rule-item">
+                <span>If One/Both Missed</span>
+                <h4>Absent</h4>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<footer class="site-footer">
+    © 2026 MSSquare Technologies • Employee Attendance Management System
+</footer>
+
+<script>
+function updateClock() {
+    const now = new Date();
+    document.getElementById("clock").innerHTML = now.toLocaleTimeString();
+}
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+
+</body>
+</html>

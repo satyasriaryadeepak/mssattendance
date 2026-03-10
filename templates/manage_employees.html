@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Employees - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="panel-body">
+
+<div class="panel-layout">
+    <aside class="panel-sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo">MS</div>
+            <div>
+                <h2>MSSquare</h2>
+                <p>Technologies</p>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/employees" class="active">Employees</a>
+            <a href="/admin/reports">Reports</a>
+            <a href="/logout">Logout</a>
+        </nav>
+    </aside>
+
+    <main class="panel-main">
+        <div class="panel-topbar">
+            <div>
+                <h1>Manage Employees</h1>
+                <p>Create, search and manage employee records</p>
+            </div>
+        </div>
+
+        <section class="glass-card">
+            <h3>Create Employee</h3>
+            <form method="POST" action="/admin/add_employee" class="modern-form-grid">
+                <input type="text" name="employee_id" placeholder="Employee ID" required>
+                <input type="text" name="name" placeholder="Employee Name" required>
+                <input type="text" name="password" placeholder="Password" required>
+                <input type="text" name="department" placeholder="Department" required>
+                <button class="primary-btn" type="submit">Create Employee</button>
+            </form>
+        </section>
+
+        <section class="glass-card">
+            <h3>Search Employee</h3>
+            <form method="GET" action="/admin/employees" class="search-row">
+                <input type="text" name="search" placeholder="Search by name or employee ID" value="{{ search }}">
+                <button class="primary-btn" type="submit">Search</button>
+            </form>
+        </section>
+
+        <section class="glass-card table-card">
+            <h3>Employee List</h3>
+            <div class="table-wrap">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Employee ID</th>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for emp in employees %}
+                        <tr>
+                            <td>{{ emp.id }}</td>
+                            <td>{{ emp.employee_id }}</td>
+                            <td>{{ emp.name }}</td>
+                            <td>{{ emp.department }}</td>
+                            <td>
+                                {% if emp.status == 'active' %}
+                                    <span class="status-pill success">Active</span>
+                                {% else %}
+                                    <span class="status-pill danger">Resigned</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a class="table-btn danger-btn" href="/admin/delete_employee/{{ emp.id }}">Delete</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="panel-footer">
+            © 2026 MSSquare Technologies • Employee Attendance Management System
+        </footer>
+    </main>
+</div>
+
+</body>
+</html>

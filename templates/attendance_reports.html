@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Reports - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="panel-body">
+
+<div class="panel-layout">
+    <aside class="panel-sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo">MS</div>
+            <div>
+                <h2>MSSquare</h2>
+                <p>Technologies</p>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/employees">Employees</a>
+            <a href="/admin/reports" class="active">Reports</a>
+            <a href="/logout">Logout</a>
+        </nav>
+    </aside>
+
+    <main class="panel-main">
+        <div class="panel-topbar">
+            <div>
+                <h1>Attendance Reports</h1>
+                <p>Daily and monthly employee attendance records</p>
+            </div>
+        </div>
+
+        <section class="glass-card table-card">
+            <h3>Attendance Records</h3>
+            <div class="table-wrap">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Employee ID</th>
+                            <th>Date</th>
+                            <th>Morning</th>
+                            <th>Afternoon</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in records %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.employee_id }}</td>
+                            <td>{{ row.date }}</td>
+                            <td>{{ row.morning }}</td>
+                            <td>{{ row.afternoon }}</td>
+                            <td>
+                                {% if row.status == 'Present' %}
+                                    <span class="status-pill success">Present</span>
+                                {% else %}
+                                    <span class="status-pill danger">Absent</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="panel-footer">
+            © 2026 MSSquare Technologies • Employee Attendance Management System
+        </footer>
+    </main>
+</div>
+
+</body>
+</html>

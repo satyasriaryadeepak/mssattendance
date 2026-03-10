@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-body">
+
+    <div class="auth-shell">
+
+        <!-- LEFT SIDE -->
+        <div class="auth-left">
+            <div class="brand-top">
+                <div class="brand-logo">MS</div>
+                <div>
+                    <h2>MSSquare Technologies</h2>
+                    <p>Employee Attendance System</p>
+                </div>
+            </div>
+
+            <div class="auth-left-content">
+                <span class="pill-badge">Professional Attendance Platform</span>
+
+                <h1>Smart attendance management for modern teams.</h1>
+
+                <p>
+                    Login as admin or employee to manage real-time attendance,
+                    employee records, and attendance reports in one place.
+                </p>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>Admin Access</h3>
+                        <p>Create employees, manage data, and monitor attendance reports.</p>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Employee Portal</h3>
+                        <p>Mark attendance, view profile, and track daily attendance status.</p>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Real-Time Tracking</h3>
+                        <p>Attendance is updated instantly with morning and afternoon rules.</p>
+                    </div>
+
+                    <div class="feature-card">
+                        <h3>Reports</h3>
+                        <p>Review employee attendance records and monthly summaries easily.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT SIDE -->
+        <div class="auth-right">
+            <div class="auth-card">
+                <div class="signin-top">
+                    <h2>Sign In</h2>
+                    <p>Access your MSSquare attendance dashboard</p>
+                </div>
+
+                <form method="POST" action="/login" class="signin-form">
+                    <label>Select Role</label>
+                    <select name="role" required>
+                        <option value="">Choose Role</option>
+                        <option value="admin">Admin</option>
+                        <option value="employee">Employee</option>
+                    </select>
+
+                    <label>ID / Username</label>
+                    <input
+                        type="text"
+                        name="username"
+                        placeholder="Enter Admin username or Employee ID"
+                        required
+                    >
+
+                    <label>Password</label>
+                    <input
+                        type="password"
+                        name="password"
+                        placeholder="Enter password"
+                        required
+                    >
+
+                    <button type="submit" class="primary-btn login-btn">Login</button>
+                </form>
+
+                <div class="login-footer-note">
+                    <p>© 2026 MSSquare Technologies</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>
