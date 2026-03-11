@@ -11,7 +11,9 @@
 <div class="panel-layout">
     <aside class="panel-sidebar">
         <div class="sidebar-brand">
-            <div class="brand-logo">MS</div>
+            <div class="brand-logo">
+                <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="Logo">
+            </div>
             <div>
                 <h2>MSSquare</h2>
                 <p>Technologies</p>
@@ -59,6 +61,8 @@
                             <td>
                                 {% if row.status == 'Present' %}
                                     <span class="status-pill success">Present</span>
+                                {% elif row.status == 'Half Day' %}
+                                    <span class="status-pill half-day">Half Day</span>
                                 {% else %}
                                     <span class="status-pill danger">Absent</span>
                                 {% endif %}

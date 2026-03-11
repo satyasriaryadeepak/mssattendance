@@ -10,7 +10,9 @@
 
 <header class="site-header">
     <div class="logo-wrap">
-        <div class="logo-badge">MS</div>
+        <div class="logo-badge">
+            <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="Logo">
+        </div>
         <div>
             <h2>MSSquare Technologies</h2>
             <p>Employee Attendance System</p>
@@ -77,7 +79,7 @@
 
     <div class="info-card">
         <h3>Attendance Rule</h3>
-        <p>If both are marked you are <b>Present</b>. If one or both are missed you are <b>Absent</b>.</p>
+        <p>If both are marked you are <b>Present</b>. If one is marked you are <b>Half Day</b>. If neither is marked you are <b>Absent</b>.</p>
     </div>
 </section>
 

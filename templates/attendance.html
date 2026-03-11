@@ -10,7 +10,9 @@
 
 <header class="site-header">
     <div class="logo-wrap">
-        <div class="logo-badge">MS</div>
+        <div class="logo-badge">
+            <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="Logo">
+        </div>
         <div>
             <h2>MSSquare Technologies</h2>
             <p>Employee Attendance System</p>
@@ -34,7 +36,7 @@
 
             <div class="attendance-dark-box">
                 <span>Morning Status</span>
-                <h3>
+                <h3 id="morning-status">
                     {% if record and record.morning == 1 %}
                         Marked
                     {% else %}
@@ -45,7 +47,7 @@
 
             <div class="attendance-dark-box">
                 <span>Afternoon Status</span>
-                <h3>
+                <h3 id="afternoon-status">
                     {% if record and record.afternoon == 1 %}
                         Marked
                     {% else %}
@@ -56,7 +58,7 @@
 
             <div class="attendance-dark-box">
                 <span>Final Status</span>
-                <h3>
+                <h3 id="final-status">
                     {% if record %}
                         {{ record.status }}
                     {% else %}
@@ -83,20 +85,25 @@
         </p>
 
         <div class="attendance-buttons-row">
-            <form method="POST" action="/employee/mark_attendance">
-                <input type="hidden" name="period" value="morning">
-                <button class="primary-btn attendance-full-btn" type="submit">Mark Morning Attendance</button>
-            </form>
-
-            <form method="POST" action="/employee/mark_attendance">
-                <input type="hidden" name="period" value="afternoon">
-                <button class="secondary-btn attendance-full-btn" type="submit">Mark Afternoon Attendance</button>
-            </form>
+            <button 
+                class="primary-btn attendance-full-btn" 
+                onclick="markAttendance('morning')"
+                id="btn-morning"
+            >Mark Morning Attendance</button>
+            
+            <button 
+                class="secondary-btn attendance-full-btn" 
+                onclick="markAttendance('afternoon')"
+                id="btn-afternoon"
+            >Mark Afternoon Attendance</button>
+            
             <a href="/logout" class="logout-attendance-btn">Logout</a>
         </div>
 
+        <div id="attendance-msg" class="attendance-full-message" style="display: none;"></div>
+        
         {% if msg %}
-        <div class="attendance-full-message">
+        <div class="attendance-full-message" id="server-msg">
             {{ msg }}
         </div>
         {% endif %}
@@ -106,7 +113,7 @@
     <section class="attendance-rules-landscape">
         <div class="rules-header">
             <h3>Attendance Rules</h3>
-            <p>Follow company timing guidelines for valid attendance marking.</p>
+            <p>If both marked = <b>Present</b>. If one marked = <b>Half Day</b>. If none marked = <b>Absent</b>.</p>
         </div>
 
         <div class="rules-grid">
@@ -136,7 +143,12 @@
             </div>
 
             <div class="rule-item">
-                <span>If One/Both Missed</span>
+                <span>If One Marked</span>
+                <h4>Half Day</h4>
+            </div>
+
+            <div class="rule-item">
+                <span>If None Marked</span>
                 <h4>Absent</h4>
             </div>
         </div>
@@ -147,14 +159,166 @@
 <footer class="site-footer">
     © 2026 MSSquare Technologies • Employee Attendance Management System
 </footer>
-
 <script>
 function updateClock() {
-    const now = new Date();
-    document.getElementById("clock").innerHTML = now.toLocaleTimeString();
+    const clockEl = document.getElementById("clock");
+    if (clockEl) {
+        const now = new Date();
+        clockEl.innerHTML = now.toLocaleTimeString();
+    }
 }
+
+function updateStatusUI() {
+    fetch('/api/attendance_status')
+        .then(response => {
+            if (!response.ok) throw new Error('Network error');
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) return;
+            
+            const mStat = document.getElementById('morning-status');
+            const aStat = document.getElementById('afternoon-status');
+            const fStat = document.getElementById('final-status');
+            
+            if (mStat) mStat.innerText = data.morning === 1 ? 'Marked' : 'Not Marked';
+            if (aStat) aStat.innerText = data.afternoon === 1 ? 'Marked' : 'Not Marked';
+            if (fStat) fStat.innerText = data.status;
+            
+            // Subtle button updates
+            const bM = document.getElementById('btn-morning');
+            const bA = document.getElementById('btn-afternoon');
+            
+            if (bM) {
+                if (data.morning === 1) {
+                    bM.innerText = 'Morning Marked';
+                    bM.classList.add('btn-disabled-style');
+                } else {
+                    bM.innerText = 'Mark Morning Attendance';
+                    bM.classList.remove('btn-disabled-style');
+                }
+            }
+            if (bA) {
+                if (data.afternoon === 1) {
+                    bA.innerText = 'Afternoon Marked';
+                    bA.classList.add('btn-disabled-style');
+                } else {
+                    bA.innerText = 'Mark Afternoon Attendance';
+                    bA.classList.remove('btn-disabled-style');
+                }
+            }
+        })
+        .catch(err => console.warn('Polling error:', err));
+}
+
+function markAttendance(period) {
+    const msgDiv = document.getElementById('attendance-msg');
+    const serverMsg = document.getElementById('server-msg');
+    const btn = period === 'morning' ? document.getElementById('btn-morning') : document.getElementById('btn-afternoon');
+    
+    if (serverMsg) serverMsg.style.display = 'none';
+    if (msgDiv) {
+        msgDiv.innerText = 'Communicating with server...';
+        msgDiv.style.display = 'block';
+        msgDiv.style.background = '#eff6ff'; // Light blue info
+    }
+
+    const originalText = btn ? btn.innerText : '';
+    if (btn) {
+        btn.innerText = 'Loading...';
+        btn.style.pointerEvents = 'none';
+    }
+
+    const formData = new FormData();
+    formData.append('period', period);
+
+    fetch('/employee/mark_attendance', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        }
+    })
+    .then(async response => {
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await response.json() : null;
+
+        if (!response.ok) {
+            if (data && data.message) {
+                return { message: data.message, status: 'Error' };
+            }
+            throw new Error('Status: ' + response.status);
+        }
+        return data;
+    })
+    .then(data => {
+        if (msgDiv) {
+            msgDiv.innerText = data.message;
+            msgDiv.style.display = 'block';
+            
+            if (data.status === 'Error') {
+                 msgDiv.style.background = '#fee2e2'; // Red error
+                 msgDiv.style.color = '#991b1b';
+                 return;
+            }
+
+            // "Pop" notification for early afternoon
+            if (data.message === "you can only mark after 1:45") {
+                alert(data.message);
+                msgDiv.style.background = '#fef3c7'; // Amber warning
+                msgDiv.style.color = '#92400e';
+            } else if (data.message.includes('already') || data.message.includes('over')) {
+                msgDiv.style.background = '#fee2e2'; // Red error
+                msgDiv.style.color = '#991b1b';
+            } else {
+                msgDiv.style.background = '#dcfce7'; // Green success
+                msgDiv.style.color = '#166534';
+            }
+        }
+        if (btn) {
+            btn.innerText = originalText;
+            btn.style.pointerEvents = 'auto';
+        }
+        updateStatusUI();
+    })
+    .catch(err => {
+        console.error('API Error:', err);
+        if (msgDiv) {
+            msgDiv.innerText = 'Server Error. Please check logs.';
+            msgDiv.style.display = 'block';
+            msgDiv.style.background = '#fee2e2';
+            msgDiv.style.color = '#991b1b';
+        }
+        if (btn) {
+            btn.innerText = originalText;
+            btn.style.pointerEvents = 'auto';
+        }
+    });
+}
+
+// Custom style for marked buttons
+const style = document.createElement('style');
+style.innerHTML = `
+    .btn-disabled-style {
+        opacity: 0.6;
+        cursor: default;
+    }
+    .attendance-full-message {
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 12px;
+        font-weight: 500;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+`;
+document.head.appendChild(style);
+
 setInterval(updateClock, 1000);
+setInterval(updateStatusUI, 5000); // Faster polling for better "live" feel
 updateClock();
+updateStatusUI();
 </script>
 
 </body>

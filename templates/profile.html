@@ -10,7 +10,9 @@
 
 <header class="site-header">
     <div class="logo-wrap">
-        <div class="logo-badge">MS</div>
+        <div class="logo-badge">
+            <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="Logo">
+        </div>
         <div>
             <h2>MSSquare Technologies</h2>
             <p>Employee Attendance System</p>
@@ -26,85 +28,100 @@
     </nav>
 </header>
 
-<div class="home-content">
+<div class="home-content profile-content">
 
-    <section class="attendance-top-section">
-        <div class="attendance-top-grid">
-
-            <div class="attendance-dark-box">
-                <span>Employee Name</span>
-                <h3>{{ employee.name }}</h3>
+    <div class="profile-hero-section">
+        <div class="profile-hero-card">
+            <div class="profile-user-info">
+                <div class="profile-avatar-placeholder">
+                    <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="User">
+                </div>
+                <div class="user-meta">
+                    <h2>{{ employee.name }}</h2>
+                    <p>employee<br>ID: {{ employee.employee_id }}</p>
+                </div>
             </div>
 
-            <div class="attendance-dark-box">
-                <span>Employee ID</span>
-                <h3>{{ employee.employee_id }}</h3>
+            <div class="chart-container">
+                <svg viewBox="0 0 36 36" class="circular-chart">
+                    <path class="circle-bg"
+                        d="M18 2.0845
+                            a 15.9155 15.9155 0 0 1 0 31.831
+                            a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path class="circle"
+                        stroke-dasharray="{{ percentage }}, 100"
+                        d="M18 2.0845
+                            a 15.9155 15.9155 0 0 1 0 31.831
+                            a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <text x="18" y="20.35" class="percentage-text">{{ percentage }}%</text>
+                </svg>
+                <div class="chart-label">Attendance</div>
             </div>
-
-            <div class="attendance-dark-box">
-                <span>Attendance %</span>
-                <h3>{{ percentage }}%</h3>
-            </div>
-
-            <div class="attendance-dark-box">
-                <span>Department</span>
-                <h3>{{ employee.department }}</h3>
-            </div>
-
         </div>
-    </section>
+    </div>
 
-    <section class="attendance-full-section">
-        <span class="hero-tag">My Profile</span>
-        <h1>Attendance Records</h1>
-        <p>
-            View your profile details, attendance percentage, and daily attendance history.
-        </p>
-    </section>
+    <div class="profile-stats-grid">
+        <div class="stat-mini-card">
+            <span>Total Working Days</span>
+            <h2>{{ total_days }}</h2>
+        </div>
+        <div class="stat-mini-card">
+            <span>Present Days</span>
+            <h2>{{ present_count }}</h2>
+        </div>
+        <div class="stat-mini-card">
+            <span>Half Days</span>
+            <h2>{{ half_day_count }}</h2>
+        </div>
+        <div class="stat-mini-card">
+            <span>Late Logins</span>
+            <h2>--</h2>
+        </div>
+    </div>
 
-    <section class="attendance-rules-landscape">
-        <div class="rules-header">
-            <h3>Attendance Record Table</h3>
-            <p>Your attendance history is shown below.</p>
+    <div class="profile-report-section">
+        <div class="report-section-header">
+            <h2>Attendance Report</h2>
+            <a href="#" class="view-all-btn">View All</a>
         </div>
 
-        <div class="table-wrap">
-            <table class="modern-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Morning</th>
-                        <th>Afternoon</th>
-                        <th>Status</th>
-                        <th>Logout Time</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in records %}
-                    <tr>
-                        <td>{{ row.date }}</td>
-                        <td>
-                            {% if row.morning == 1 %}
-                                Marked
-                            {% else %}
-                                Not Marked
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if row.afternoon == 1 %}
-                                Marked
-                            {% else %}
-                                Not Marked
-                            {% endif %}
-                        </td>
-                        <td>{{ row.status }}</td>
-                        <td>{{ row.logout_time }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="profile-table-card">
+            <div class="table-wrap">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Login</th>
+                            <th>Break</th>
+                            <th>Logout</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in records %}
+                        <tr>
+                            <td>{{ row.date }}</td>
+                            <td>{{ row.login_time or '---' }}</td>
+                            <td>---</td>
+                            <td>{{ row.logout_time or '---' }}</td>
+                            <td>
+                                {% if row.status == 'Present' %}
+                                    <span class="status-pill success">Present</span>
+                                {% elif row.status == 'Half Day' %}
+                                    <span class="status-pill half-day" style="color:#d97706; background:#fef3c7;">half day</span>
+                                {% else %}
+                                    <span class="status-pill danger">Absent</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </section>
+    </div>
 
 </div>
 

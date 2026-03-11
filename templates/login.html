@@ -6,95 +6,47 @@
     <title>Login - MSSquare Technologies</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body class="auth-body">
+<body class="new-login-body">
 
-    <div class="auth-shell">
-
-        <!-- LEFT SIDE -->
-        <div class="auth-left">
-            <div class="brand-top">
-                <div class="brand-logo">MS</div>
-                <div>
-                    <h2>MSSquare Technologies</h2>
-                    <p>Employee Attendance System</p>
-                </div>
-            </div>
-
-            <div class="auth-left-content">
-                <span class="pill-badge">Professional Attendance Platform</span>
-
-                <h1>Smart attendance management for modern teams.</h1>
-
-                <p>
-                    Login as admin or employee to manage real-time attendance,
-                    employee records, and attendance reports in one place.
-                </p>
-
-                <div class="feature-grid">
-                    <div class="feature-card">
-                        <h3>Admin Access</h3>
-                        <p>Create employees, manage data, and monitor attendance reports.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <h3>Employee Portal</h3>
-                        <p>Mark attendance, view profile, and track daily attendance status.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <h3>Real-Time Tracking</h3>
-                        <p>Attendance is updated instantly with morning and afternoon rules.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <h3>Reports</h3>
-                        <p>Review employee attendance records and monthly summaries easily.</p>
-                    </div>
-                </div>
-            </div>
+    <div class="new-login-container">
+        <div class="login-logo-circle">
+            <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="MSSQUARE Logo">
         </div>
 
-        <!-- RIGHT SIDE -->
-        <div class="auth-right">
-            <div class="auth-card">
-                <div class="signin-top">
-                    <h2>Sign In</h2>
-                    <p>Access your MSSquare attendance dashboard</p>
-                </div>
+        <div class="new-login-card">
+            <h1>Welcome to MSSQUARE</h1>
+            <p class="sub-heading">Employee Attendance Management System</p>
 
-                <form method="POST" action="/login" class="signin-form">
-                    <label>Select Role</label>
-                    <select name="role" required>
-                        <option value="">Choose Role</option>
-                        <option value="admin">Admin</option>
-                        <option value="employee">Employee</option>
-                    </select>
+            <form method="POST" action="/login" class="new-signin-form">
+                <select name="role" required>
+                    <option value="">Select Role</option>
+                    <option value="admin">Admin Login</option>
+                    <option value="employee">Employee Login</option>
+                </select>
 
-                    <label>ID / Username</label>
-                    <input
-                        type="text"
-                        name="username"
-                        placeholder="Enter Admin username or Employee ID"
-                        required
-                    >
+                <input
+                    type="text"
+                    name="username"
+                    placeholder="Username"
+                    required
+                >
 
-                    <label>Password</label>
-                    <input
-                        type="password"
-                        name="password"
-                        placeholder="Enter password"
-                        required
-                    >
+                <input
+                    type="password"
+                    name="password"
+                    placeholder="Password"
+                    required
+                >
 
-                    <button type="submit" class="primary-btn login-btn">Login</button>
-                </form>
+                <button type="submit" class="new-login-btn">Sign In</button>
+            </form>
 
-                <div class="login-footer-note">
-                    <p>© 2026 MSSquare Technologies</p>
-                </div>
+            {% if error %}
+            <div class="error-message">
+                {{ error }}
             </div>
+            {% endif %}
         </div>
-
     </div>
 
 </body>

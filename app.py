@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import sqlite3
 import os
 from datetime import datetime
@@ -46,7 +46,7 @@ def login():
             session["role"] = "admin"
             session["username"] = admin["username"]
             return redirect(url_for("admin_dashboard"))
-        return "Invalid admin login"
+        return render_template("login.html", error="Invalid admin login credentials")
 
     elif role == "employee":
         cursor.execute(
@@ -61,7 +61,7 @@ def login():
             session["employee_id"] = emp["employee_id"]
             session["employee_name"] = emp["name"]
             return redirect(url_for("employee_home"))
-        return "Invalid employee login"
+        return render_template("login.html", error="Invalid employee login credentials")
 
     conn.close()
     return "Invalid login"
@@ -339,13 +339,16 @@ def mark_attendance():
                 WHERE employee_id=? AND date=?
             """, (employee_id, today))
             conn.commit()
-            message = "Morning attendance marked successfully"
+            message = "attendace should be mark on time"
         else:
-            message = "Morning attendance time missed"
+            message = "Morning attendance already marked"
 
     elif period == "afternoon":
+        afternoon_start = "13:45"
         if record["afternoon"] == 1:
             message = "Afternoon attendance already marked"
+        elif current_time < afternoon_start:
+            message = "you can only mark after 1:45"
         elif current_time <= afternoon_deadline:
             cursor.execute("""
                 UPDATE attendance
@@ -353,9 +356,9 @@ def mark_attendance():
                 WHERE employee_id=? AND date=?
             """, (employee_id, today))
             conn.commit()
-            message = "Afternoon attendance marked successfully"
+            message = "attendace should be mark on time"
         else:
-            message = "Afternoon attendance time missed"
+            message = "the time is over attendance is already marked"
 
     cursor.execute("""
         SELECT * FROM attendance
@@ -363,7 +366,13 @@ def mark_attendance():
     """, (employee_id, today))
     updated = cursor.fetchone()
 
-    status = "Present" if updated["morning"] == 1 and updated["afternoon"] == 1 else "Absent"
+    # New attendance logic
+    if updated["morning"] == 1 and updated["afternoon"] == 1:
+        status = "Present"
+    elif updated["morning"] == 1 or updated["afternoon"] == 1:
+        status = "Half Day"
+    else:
+        status = "Absent"
 
     cursor.execute("""
         UPDATE attendance
@@ -374,7 +383,60 @@ def mark_attendance():
     conn.commit()
     conn.close()
 
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+       request.headers.get('Accept') == 'application/json':
+        return jsonify({"message": message, "status": status})
+
     return redirect(url_for("attendance_page", msg=message))
+
+
+# ---------------- API FOR LIVE UPDATES ----------------
+
+@app.route("/api/attendance_status")
+def get_attendance_status():
+    if session.get("role") != "employee":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    employee_id = session.get("employee_id")
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT morning, afternoon, status FROM attendance
+        WHERE employee_id=? AND date=?
+    """, (employee_id, today))
+    record = cursor.fetchone()
+    
+    now = datetime.now()
+    current_time = now.strftime("%H:%M")
+    morning_deadline = "10:10"
+    afternoon_deadline = "14:10"
+
+    # If no record, calculate what it should be based on deadlines
+    if record:
+        morning = record["morning"]
+        afternoon = record["afternoon"]
+        status = record["status"]
+    else:
+        morning = 0
+        afternoon = 0
+        if current_time > afternoon_deadline:
+            status = "Absent"
+        elif current_time > morning_deadline:
+            status = "Half Day" # Potentially, if they miss morning
+        else:
+            status = "Pending"
+
+    conn.close()
+
+    return jsonify({
+        "morning": morning,
+        "afternoon": afternoon,
+        "status": status,
+        "current_time": current_time
+    })
 
 
 # ---------------- PROFILE ----------------
@@ -406,15 +468,26 @@ def profile():
         SELECT COUNT(*) FROM attendance
         WHERE employee_id=? AND status='Present'
     """, (employee_id,))
-    present = cursor.fetchone()[0]
+    present_count = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT COUNT(*) FROM attendance
+        WHERE employee_id=? AND status='Half Day'
+    """, (employee_id,))
+    half_day_count = cursor.fetchone()[0]
 
     cursor.execute("""
         SELECT COUNT(*) FROM attendance
         WHERE employee_id=?
     """, (employee_id,))
-    total = cursor.fetchone()[0]
+    total_days = cursor.fetchone()[0]
 
-    percentage = (present / total * 100) if total > 0 else 0
+    # Calculate percentage: (Present + 0.5 * Half Day) / Total
+    if total_days > 0:
+        attendance_value = present_count + (0.5 * half_day_count)
+        percentage = round((attendance_value / total_days) * 100)
+    else:
+        percentage = 0
 
     conn.close()
 
@@ -422,7 +495,10 @@ def profile():
         "profile.html",
         employee=employee,
         records=records,
-        percentage=round(percentage, 2)
+        present_count=present_count,
+        half_day_count=half_day_count,
+        total_days=total_days,
+        percentage=percentage
     )
 
 

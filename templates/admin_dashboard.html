@@ -11,7 +11,9 @@
 <div class="panel-layout">
     <aside class="panel-sidebar">
         <div class="sidebar-brand">
-            <div class="brand-logo">MS</div>
+            <div class="brand-logo">
+                <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="Logo">
+            </div>
             <div>
                 <h2>MSSquare</h2>
                 <p>Technologies</p>
@@ -68,7 +70,8 @@
                     <li>Morning mark before <b>10:10 AM</b></li>
                     <li>Afternoon mark before <b>2:10 PM</b></li>
                     <li>Both marks done = <b>Present</b></li>
-                    <li>One or both missed = <b>Absent</b></li>
+                    <li>One mark done = <b>Half Day</b></li>
+                    <li>Neither mark done = <b>Absent</b></li>
                 </ul>
             </div>
         </section>
