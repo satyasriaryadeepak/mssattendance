@@ -20,6 +20,7 @@ def get_db_connection():
 
 @app.route("/")
 def home():
+    print("DEBUG: Home route accessed /", flush=True)
     return render_template("login.html")
 
 
