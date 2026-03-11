@@ -1,6 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import sqlite3
 import os
+import math
+import csv
+import io
+from flask import Response
 from datetime import datetime
 
 app = Flask(__name__)
@@ -9,6 +13,26 @@ app.secret_key = "mssquare_secret_key"
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "database.db")
 
+# --- Geofencing Configuration ---
+OFFICE_LAT = 17.452090
+OFFICE_LNG = 78.392460
+ALLOWED_RADIUS_METERS = 200
+
+def haversine(lat1, lon1, lat2, lon2):
+    """
+    Calculate the great circle distance between two points 
+    on the earth (specified in decimal degrees)
+    """
+    # convert decimal degrees to radians 
+    lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
+
+    # haversine formula 
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a)) 
+    r = 6371000 # Radius of earth in meters
+    return c * r
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -208,6 +232,22 @@ def delete_employee(id):
     return redirect(url_for("manage_employees"))
 
 
+@app.route("/admin/reset_password/<int:id>", methods=["POST"])
+def reset_password(id):
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+    
+    new_password = request.form.get("new_password", "").strip()
+    if new_password:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE employees SET password=? WHERE id=?", (new_password, id))
+        conn.commit()
+        conn.close()
+    
+    return redirect(url_for("manage_employees"))
+
+
 # ---------------- ADMIN REPORTS ----------------
 
 @app.route("/admin/reports")
@@ -218,6 +258,7 @@ def attendance_reports():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # Get all records for the main table
     cursor.execute("""
         SELECT attendance.*, employees.name
         FROM attendance
@@ -226,9 +267,85 @@ def attendance_reports():
     """)
     records = cursor.fetchall()
 
+    # Get active employees for the download dropdown
+    cursor.execute("SELECT employee_id, name FROM employees WHERE status='active' ORDER BY name")
+    employees = cursor.fetchall()
+    
     conn.close()
 
-    return render_template("attendance_reports.html", records=records)
+    return render_template("attendance_reports.html", records=records, employees=employees)
+
+
+@app.route("/admin/download_report")
+def download_report():
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+
+    employee_id = request.args.get("employee_id")
+    month_str = request.args.get("month") # format YYYY-MM
+    
+    if not employee_id or not month_str:
+        return "Missing employee ID or month", 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Get employee details
+    cursor.execute("SELECT name FROM employees WHERE employee_id=?", (employee_id,))
+    emp = cursor.fetchone()
+    
+    if not emp:
+        conn.close()
+        return "Employee not found", 404
+        
+    emp_name = emp["name"]
+
+    # Fetch records for that employee where the date starts with the selected YYYY-MM
+    search_pattern = f"{month_str}-%"
+    cursor.execute("""
+        SELECT date, morning, afternoon, status, logout_time
+        FROM attendance
+        WHERE employee_id=? AND date LIKE ?
+        ORDER BY date ASC
+    """, (employee_id, search_pattern))
+    records = cursor.fetchall()
+    conn.close()
+
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write Header row
+    writer.writerow(['Monthly Attendance Report'])
+    writer.writerow(['Employee Name:', emp_name])
+    writer.writerow(['Employee ID:', employee_id])
+    writer.writerow(['Month:', month_str])
+    writer.writerow([]) # Empty row for spacing
+    writer.writerow(['Date', 'Morning Status', 'Afternoon Status', 'Final Status', 'Logout Time'])
+    
+    # Write data rows
+    for row in records:
+        morning_val = 'Marked' if row['morning'] == 1 else 'Not Marked'
+        afternoon_val = 'Marked' if row['afternoon'] == 1 else 'Not Marked'
+        logout_val = row['logout_time'] if row['logout_time'] else 'N/A'
+        
+        writer.writerow([
+            row['date'],
+            morning_val,
+            afternoon_val,
+            row['status'],
+            logout_val
+        ])
+
+    # Convert to response
+    csv_data = output.getvalue()
+    filename = f"Attendance_{employee_id}_{month_str}.csv"
+
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-disposition": f"attachment; filename={filename}"}
+    )
 
 
 # ---------------- EMPLOYEE HOME ----------------
@@ -290,6 +407,32 @@ def mark_attendance():
 
     employee_id = session.get("employee_id")
     period = request.form["period"]
+    
+    # Geolocation check
+    lat = request.form.get("lat")
+    lng = request.form.get("lng")
+    
+    if not lat or not lng:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+            return jsonify({"message": "Location access is required to mark attendance.", "status": "Error"}), 400
+        return redirect(url_for("attendance_page", msg="Location required!"))
+
+    try:
+        user_lat = float(lat)
+        user_lng = float(lng)
+    except ValueError:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+            return jsonify({"message": "Invalid location coordinates.", "status": "Error"}), 400
+        return redirect(url_for("attendance_page", msg="Invalid location!"))
+
+    distance = haversine(OFFICE_LAT, OFFICE_LNG, user_lat, user_lng)
+    if distance > ALLOWED_RADIUS_METERS:
+        err_msg = f"You are {int(distance)} meters away. You must be within {ALLOWED_RADIUS_METERS} meters of the office."
+        map_url = f"https://www.google.com/maps/search/?api=1&query={OFFICE_LAT},{OFFICE_LNG}"
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+            return jsonify({"message": err_msg, "status": "OutOfRange", "map_url": map_url}), 403
+        return redirect(url_for("attendance_page", msg=err_msg))
 
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")

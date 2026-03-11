@@ -218,7 +218,7 @@ function markAttendance(period) {
     
     if (serverMsg) serverMsg.style.display = 'none';
     if (msgDiv) {
-        msgDiv.innerText = 'Communicating with server...';
+        msgDiv.innerText = 'Requesting location...';
         msgDiv.style.display = 'block';
         msgDiv.style.background = '#eff6ff'; // Light blue info
     }
@@ -229,8 +229,61 @@ function markAttendance(period) {
         btn.style.pointerEvents = 'none';
     }
 
+    if (!navigator.geolocation) {
+         if (msgDiv) {
+             msgDiv.innerText = 'Geolocation is not supported by your browser.';
+             msgDiv.style.background = '#fee2e2'; // Red error
+             msgDiv.style.color = '#991b1b';
+         }
+         if (btn) {
+             btn.innerText = originalText;
+             btn.style.pointerEvents = 'auto';
+         }
+         return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        function(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv);
+        },
+        function(error) {
+            let errorMsg = 'Unknown location error.';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMsg = "Location permission denied. Please allow location access to mark attendance.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMsg = "Location information is unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    errorMsg = "The request to get user location timed out.";
+                    break;
+            }
+            if (msgDiv) {
+                msgDiv.innerText = errorMsg;
+                msgDiv.style.background = '#fee2e2'; // Red error
+                msgDiv.style.color = '#991b1b';
+            }
+            if (btn) {
+                btn.innerText = originalText;
+                btn.style.pointerEvents = 'auto';
+            }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+function sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv) {
+    if (msgDiv) {
+        msgDiv.innerText = 'Communicating with server...';
+    }
+
     const formData = new FormData();
     formData.append('period', period);
+    formData.append('lat', lat);
+    formData.append('lng', lng);
 
     fetch('/employee/mark_attendance', {
         method: 'POST',
@@ -246,7 +299,7 @@ function markAttendance(period) {
 
         if (!response.ok) {
             if (data && data.message) {
-                return { message: data.message, status: 'Error' };
+                return { message: data.message, status: data.status || 'Error', map_url: data.map_url };
             }
             throw new Error('Status: ' + response.status);
         }
@@ -257,9 +310,21 @@ function markAttendance(period) {
             msgDiv.innerText = data.message;
             msgDiv.style.display = 'block';
             
+            
             if (data.status === 'Error') {
                  msgDiv.style.background = '#fee2e2'; // Red error
                  msgDiv.style.color = '#991b1b';
+                 return;
+            }
+            
+            if (data.status === 'OutOfRange') {
+                 msgDiv.style.background = '#fef3c7'; // Amber warning
+                 msgDiv.style.color = '#92400e';
+                 if (data.map_url) {
+                      setTimeout(() => {
+                          window.open(data.map_url, '_blank');
+                      }, 2000); // Wait 2s before opening map so they can read the error message
+                 }
                  return;
             }
 
@@ -285,7 +350,7 @@ function markAttendance(period) {
     .catch(err => {
         console.error('API Error:', err);
         if (msgDiv) {
-            msgDiv.innerText = 'Server Error. Please check logs.';
+            msgDiv.innerText = err.message || 'Server Error. Please check logs.';
             msgDiv.style.display = 'block';
             msgDiv.style.background = '#fee2e2';
             msgDiv.style.color = '#991b1b';

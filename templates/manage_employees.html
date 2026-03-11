@@ -64,6 +64,7 @@
                             <th>ID</th>
                             <th>Employee ID</th>
                             <th>Name</th>
+                            <th>Password</th>
                             <th>Department</th>
                             <th>Status</th>
                             <th>Action</th>
@@ -75,6 +76,7 @@
                             <td>{{ emp.id }}</td>
                             <td>{{ emp.employee_id }}</td>
                             <td>{{ emp.name }}</td>
+                            <td>{{ emp.password }}</td>
                             <td>{{ emp.department }}</td>
                             <td>
                                 {% if emp.status == 'active' %}
@@ -84,6 +86,7 @@
                                 {% endif %}
                             </td>
                             <td>
+                                <button class="table-btn" onclick="resetPassword('{{ emp.id }}', '{{ emp.name }}')" style="background-color: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Reset Pwd</button>
                                 <a class="table-btn danger-btn" href="/admin/delete_employee/{{ emp.id }}">Delete</a>
                             </td>
                         </tr>
@@ -99,5 +102,24 @@
     </main>
 </div>
 
+<script>
+function resetPassword(empId, empName) {
+    const newPassword = prompt("Enter new password for " + empName + ":");
+    if (newPassword && newPassword.trim() !== "") {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/admin/reset_password/' + empId;
+        
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'new_password';
+        input.value = newPassword;
+        
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
 </body>
 </html>

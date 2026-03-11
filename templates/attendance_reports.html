@@ -36,6 +36,23 @@
             </div>
         </div>
 
+        <section class="glass-card" style="margin-bottom: 25px;">
+            <h3>Download Monthly Report</h3>
+            <p style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.9em;">
+                Select an employee and a month to download their attendance as a CSV file.
+            </p>
+            <form method="GET" action="/admin/download_report" class="modern-form-grid" style="grid-template-columns: 1fr 1fr auto;">
+                <select name="employee_id" required>
+                    <option value="">-- Select Employee --</option>
+                    {% for emp in employees %}
+                        <option value="{{ emp.employee_id }}">{{ emp.name }} ({{ emp.employee_id }})</option>
+                    {% endfor %}
+                </select>
+                <input type="month" name="month" required>
+                <button class="primary-btn" type="submit">Download CSV</button>
+            </form>
+        </section>
+
         <section class="glass-card table-card">
             <h3>Attendance Records</h3>
             <div class="table-wrap">
