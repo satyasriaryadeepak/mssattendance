@@ -71,11 +71,7 @@ def login():
 
 @app.route("/logout")
 def logout():
-    session.clear()
-    return redirect(url_for("home"))
-
     if session.get("role") == "employee":
-
         employee_id = session.get("employee_id")
         today = datetime.now().strftime("%Y-%m-%d")
         logout_time = datetime.now().strftime("%H:%M:%S")
@@ -98,13 +94,10 @@ def logout():
             """, (logout_time, employee_id, today))
 
             conn.commit()
-
+            print(f"DEBUG: Logout recorded for {employee_id}", flush=True)
         conn.close()
 
-    # clear login session
     session.clear()
-
-    # redirect to login page
     return redirect(url_for("home"))
 
 
@@ -514,5 +507,9 @@ def contact():
 
 # ---------------- RUN SERVER ----------------
 
+import os
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Starting server on port {port}...")
+    app.run(host="0.0.0.0", port=port, debug=True)
