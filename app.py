@@ -163,6 +163,96 @@ def admin_dashboard():
     )
 
 
+# ---------------- MANAGE ADMINS ----------------
+
+@app.route("/admin/admins")
+def manage_admins():
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+
+    search = request.args.get("search", "").strip()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if search:
+        cursor.execute("""
+            SELECT * FROM admins
+            WHERE username LIKE ?
+            ORDER BY id ASC
+        """, (f"%{search}%",))
+    else:
+        cursor.execute("SELECT * FROM admins ORDER BY id ASC")
+
+    admins = cursor.fetchall()
+    conn.close()
+
+    return render_template("manage_admins.html", admins=admins, search=search)
+
+
+@app.route("/admin/add_admin", methods=["POST"])
+def add_admin():
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+
+    username = request.form["username"].strip()
+    password = request.form["password"].strip()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            INSERT INTO admins (username, password)
+            VALUES (?, ?)
+        """, (username, password))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return "Admin username already exists"
+
+    conn.close()
+    return redirect(url_for("manage_admins"))
+
+
+@app.route("/admin/delete_admin/<int:id>")
+def delete_admin(id):
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Optional: Prevent deleting the super admin or yourself, but for now we allow deleting any
+    # Don't let them delete themselves:
+    # cursor.execute("SELECT username FROM admins WHERE id=?", (id,))
+    # adm = cursor.fetchone()
+    # if adm and adm["username"] == session.get("username"):
+    #     return "Cannot delete yourself!"
+
+    cursor.execute("DELETE FROM admins WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("manage_admins"))
+
+
+@app.route("/admin/reset_admin_password/<int:id>", methods=["POST"])
+def reset_admin_password(id):
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+    
+    new_password = request.form.get("new_password", "").strip()
+    if new_password:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE admins SET password=? WHERE id=?", (new_password, id))
+        conn.commit()
+        conn.close()
+    
+    return redirect(url_for("manage_admins"))
+
+
 # ---------------- MANAGE EMPLOYEES ----------------
 
 @app.route("/admin/employees")
@@ -329,16 +419,23 @@ def download_report():
         afternoon_val = 'Marked' if row['afternoon'] == 1 else 'Not Marked'
         logout_val = row['logout_time'] if row['logout_time'] else 'N/A'
         
+        # Format date for better Excel compatibility
+        raw_date = row['date']
+        try:
+            parsed_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d %b %Y")
+        except:
+            parsed_date = raw_date
+        
         writer.writerow([
-            row['date'],
+            parsed_date,
             morning_val,
             afternoon_val,
             row['status'],
             logout_val
         ])
 
-    # Convert to response
-    csv_data = output.getvalue()
+    # Convert to response (add UTF-8 BOM for Excel)
+    csv_data = "\ufeff" + output.getvalue()
     filename = f"Attendance_{employee_id}_{month_str}.csv"
 
     return Response(

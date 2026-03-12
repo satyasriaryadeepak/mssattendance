@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Admins - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="panel-body">
+
+<div class="panel-layout">
+    <aside class="panel-sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo">
+                <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="Logo">
+            </div>
+            <div>
+                <h2>MSSquare</h2>
+                <p>Technologies</p>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/employees">Employees</a>
+            <a href="/admin/admins" class="active">Admins</a>
+            <a href="/admin/reports">Reports</a>
+            <a href="/logout">Logout</a>
+        </nav>
+    </aside>
+
+    <main class="panel-main">
+        <div class="panel-topbar">
+            <div>
+                <h1>Manage Admins</h1>
+                <p>Create and manage admin accounts</p>
+            </div>
+        </div>
+
+        <section class="glass-card">
+            <h3>Create Admin</h3>
+            <form method="POST" action="/admin/add_admin" class="modern-form-grid" style="grid-template-columns: 1fr 1fr auto;">
+                <input type="text" name="username" placeholder="Admin Username" required>
+                <input type="text" name="password" placeholder="Password" required>
+                <button class="primary-btn" type="submit">Create Admin</button>
+            </form>
+        </section>
+
+        <section class="glass-card table-card">
+            <h3>Admin List</h3>
+            <div class="table-wrap">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Username</th>
+                            <th>Password</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for adm in admins %}
+                        <tr>
+                            <td>{{ adm.id }}</td>
+                            <td>{{ adm.username }}</td>
+                            <td>{{ adm.password }}</td>
+                            <td>
+                                <button class="table-btn" onclick="resetAdminPassword('{{ adm.id }}', '{{ adm.username }}')" style="background-color: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Reset Pwd</button>
+                                <a class="table-btn danger-btn" href="/admin/delete_admin/{{ adm.id }}" onclick="return confirm('Are you sure you want to delete this admin?');">Delete</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="panel-footer">
+            © 2026 MSSquare Technologies • Admin Portal
+        </footer>
+    </main>
+</div>
+
+<script>
+function resetAdminPassword(admId, admName) {
+    const newPassword = prompt("Enter new password for admin " + admName + ":");
+    if (newPassword && newPassword.trim() !== "") {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/admin/reset_admin_password/' + admId;
+        
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'new_password';
+        input.value = newPassword;
+        
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+</body>
+</html>
