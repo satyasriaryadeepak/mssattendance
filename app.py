@@ -260,10 +260,22 @@ def add_employee():
 
 @app.route("/admin/delete_employee/<int:id>")
 def delete_employee(id):
-    if session.get("role") != "admin":
+    if session.get("role") != "admin" :
         return redirect(url_for("home"))
 
-    supabase.table("employees").delete().eq("id", id).execute()
+    try:
+        # Get employee_id because attendance table references employee_id (TEXT), not id (INT)
+        emp_resp = supabase.table("employees").select("employee_id").eq("id", id).execute()
+        if emp_resp.data:
+            employee_id = emp_resp.data[0]["employee_id"]
+            # Delete linked attendance records first to avoid Foreign Key violation
+            supabase.table("attendance").delete().eq("employee_id", employee_id).execute()
+        
+        # Now delete the employee
+        supabase.table("employees").delete().eq("id", id).execute()
+    except Exception as e:
+        print(f"Error deleting employee: {e}", flush=True)
+        return f"Error: Could not delete employee. {str(e)}", 500
 
     return redirect(url_for("manage_employees"))
 
