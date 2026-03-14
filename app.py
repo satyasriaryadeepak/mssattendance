@@ -59,7 +59,7 @@ def haversine(lat1, lon1, lat2, lon2):
 @app.route("/")
 def home():
     print("DEBUG: Home route hit", flush=True)
-    return render_template("index.html")
+    return render_template("login.html")
 
 @app.route("/health")
 def health():
