@@ -18,9 +18,13 @@ app = Flask(__name__)
 app.secret_key = "mssquare_secret_key"
 
 # --- Supabase Configuration ---
-SUPABASE_URL = "https://ytecwdhmuparsfcuzusm.supabase.co"
-SUPABASE_KEY = "sb_publishable_klyKYGGpx1igJqXpb0YV2A_SYm0Asyk"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Prioritize environment variables, fallback to hardcoded keys
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://ytecwdhmuparsfcuzusm.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_klyKYGGpx1igJqXpb0YV2A_SYm0Asyk")
+
+print(f"DEBUG: Initializing Supabase with URL: {SUPABASE_URL}", flush=True)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+print("DEBUG: Supabase client initialized", flush=True)
 
 # --- Geofencing Configuration ---
 OFFICE_LAT = 17.452090
@@ -54,8 +58,12 @@ def haversine(lat1, lon1, lat2, lon2):
 
 @app.route("/")
 def home():
-    print("DEBUG: Home route accessed /", flush=True)
-    return render_template("login.html")
+    print("DEBUG: Home route hit", flush=True)
+    return render_template("index.html")
+
+@app.route("/health")
+def health():
+    return {"status": "healthy"}, 200
 
 
 # ---------------- LOGIN ----------------
@@ -692,7 +700,7 @@ def contact():
 
 # ---------------- RUN SERVER ----------------
 
-import os
+# Already imported os at the top
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
