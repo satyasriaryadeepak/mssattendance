@@ -92,6 +92,7 @@
                 <table class="modern-table">
                     <thead>
                         <tr>
+                            <th>S.No</th>
                             <th>Date</th>
                             <th>Login</th>
                             <th>Break</th>
@@ -102,6 +103,7 @@
                     <tbody>
                         {% for row in records %}
                         <tr>
+                            <td>{{ loop.index }}</td>
                             <td>{{ row.date }}</td>
                             <td>{{ row.login_time or '---' }}</td>
                             <td>---</td>

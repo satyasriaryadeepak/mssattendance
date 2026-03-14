@@ -82,7 +82,7 @@
                     <tbody>
                         {% for emp in employees %}
                         <tr>
-                            <td>{{ emp.id }}</td>
+                            <td>{{ loop.index }}</td>
                             <td>{{ emp.employee_id }}</td>
                             <td>{{ emp.name }}</td>
                             <td>{{ emp.password }}</td>

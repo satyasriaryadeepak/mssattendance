@@ -60,6 +60,7 @@
                 <table class="modern-table">
                     <thead>
                         <tr>
+                            <th>S.No</th>
                             <th>Name</th>
                             <th>Employee ID</th>
                             <th>Date</th>
@@ -75,6 +76,7 @@
                     <tbody>
                         {% for row in records %}
                         <tr>
+                            <td>{{ loop.index }}</td>
                             <td>{{ row.name }}</td>
                             <td>{{ row.employee_id }}</td>
                             <td>{{ row.date }}</td>
