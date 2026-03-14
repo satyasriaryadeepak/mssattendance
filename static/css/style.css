@@ -24,7 +24,7 @@ body{
 header{
     background:#fff;
     color:#000;
-    padding:16px 40px;
+    padding:8px 40px;
     display:flex;
     justify-content:space-between;
     align-items:center;
@@ -690,8 +690,8 @@ footer{
 }
 
 .brand-logo{
-    width:90px;
-    height:90px;
+    width:70px;
+    height:70px;
     border-radius:14px;
     background:none;
     display:flex;
@@ -1063,8 +1063,8 @@ footer{
 }
 
 .logo-badge {
-    width: 90px;
-    height: 90px;
+    width: 70px;
+    height: 70px;
     background: none;
     color: #2563eb;
     border-radius: 10px;
@@ -1691,7 +1691,7 @@ background:#f4f7fb;
 display:flex;
 justify-content:space-between;
 align-items:center;
-padding:18px 60px;
+padding:10px 60px;
 background:white;
 box-shadow:0 5px 15px rgba(0,0,0,0.05);
 color: #000;
@@ -1714,8 +1714,8 @@ gap:12px;
 }
 
 .logo-badge{
-width:90px;
-height:90px;
+width:75px;
+height:75px;
 border-radius:10px;
 background:none;
 color:white;
