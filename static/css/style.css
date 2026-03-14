@@ -22,22 +22,29 @@ body{
 
 /* HEADER */
 header{
-    background:linear-gradient(90deg,#0f172a,#1e3a8a);
-    color:#fff;
+    background:#fff;
+    color:#000;
     padding:16px 40px;
     display:flex;
     justify-content:space-between;
     align-items:center;
-    box-shadow:0 4px 14px rgba(0,0,0,0.15);
+    box-shadow:0 2px 10px rgba(0,0,0,0.1);
     position:sticky;
     top:0;
     z-index:1000;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 header h2{
     font-size:24px;
     font-weight:700;
     letter-spacing:0.5px;
+    color: #000;
+}
+
+header p{
+    color: #4b5563;
+    font-size: 14px;
 }
 
 nav{
@@ -47,7 +54,7 @@ nav{
 }
 
 nav a{
-    color:#fff;
+    color:#1e3a8a;
     text-decoration:none;
     margin-left:22px;
     font-size:15px;
@@ -683,17 +690,17 @@ footer{
 }
 
 .brand-logo{
-    width:48px;
-    height:48px;
+    width:90px;
+    height:90px;
     border-radius:14px;
-    background:linear-gradient(135deg,#60a5fa,#2563eb);
+    background:none;
     display:flex;
     align-items:center;
     justify-content:center;
     color:#fff;
     font-weight:700;
     font-size:18px;
-    box-shadow:0 10px 25px rgba(37,99,235,0.3);
+    box-shadow:none;
 }
 
 .sidebar-brand h2{
@@ -1056,9 +1063,9 @@ footer{
 }
 
 .logo-badge {
-    width: 45px;
-    height: 45px;
-    background: #ffffff;
+    width: 90px;
+    height: 90px;
+    background: none;
     color: #2563eb;
     border-radius: 10px;
     display: flex;
@@ -1068,6 +1075,7 @@ footer{
     font-size: 20px;
     flex-shrink: 0;
     overflow: hidden;
+    box-shadow: none;
 }
 
 .logo-badge img {
@@ -1079,7 +1087,7 @@ footer{
 .brand-logo {
     width: 40px;
     height: 40px;
-    background: #ffffff;
+    background: none;
     border-radius: 8px;
     color: #2563eb;
     display: flex;
@@ -1089,6 +1097,7 @@ footer{
     font-size: 18px;
     flex-shrink: 0;
     overflow: hidden;
+    box-shadow: none;
 }
 
 .brand-logo img {
@@ -1347,7 +1356,7 @@ footer{
 .brand-logo {
     width: 40px;
     height: 40px;
-    background: #ffffff;
+    background: none;
     border-radius: 8px;
     color: #2563eb;
     display: flex;
@@ -1357,6 +1366,7 @@ footer{
     font-size: 18px;
     flex-shrink: 0;
     overflow: hidden;
+    box-shadow: none;
 }
 
 .brand-logo img {
@@ -1684,6 +1694,17 @@ align-items:center;
 padding:18px 60px;
 background:white;
 box-shadow:0 5px 15px rgba(0,0,0,0.05);
+color: #000;
+}
+
+.site-header h2, .logo-wrap h2{
+    color: #000 !important;
+    margin: 0;
+}
+
+.site-header p, .logo-wrap p{
+    color: #000 !important;
+    margin: 0;
 }
 
 .logo-wrap{
@@ -1693,15 +1714,16 @@ gap:12px;
 }
 
 .logo-badge{
-width:45px;
-height:45px;
+width:90px;
+height:90px;
 border-radius:10px;
-background:linear-gradient(135deg,#2563eb,#1e3a8a);
+background:none;
 color:white;
 display:flex;
 align-items:center;
 justify-content:center;
 font-weight:bold;
+box-shadow: none;
 }
 
 .site-nav a{
