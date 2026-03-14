@@ -1,17 +1,26 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-import sqlite3
+from supabase import create_client, Client
 import os
 import math
 import csv
 import io
 from flask import Response
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def get_now_ist():
+    # Use UTC now and convert to IST to be server-agnostic
+    return datetime.now(timezone.utc).astimezone(IST)
+
 
 app = Flask(__name__)
 app.secret_key = "mssquare_secret_key"
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "database.db")
+# --- Supabase Configuration ---
+SUPABASE_URL = "https://ytecwdhmuparsfcuzusm.supabase.co"
+SUPABASE_KEY = "sb_publishable_klyKYGGpx1igJqXpb0YV2A_SYm0Asyk"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- Geofencing Configuration ---
 OFFICE_LAT = 17.452090
@@ -34,10 +43,11 @@ def haversine(lat1, lon1, lat2, lon2):
     r = 6371000 # Radius of earth in meters
     return c * r
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Sqlite connection legacy (removed)
+# def get_db_connection():
+#     conn = sqlite3.connect(DB_PATH)
+#     conn.row_factory = sqlite3.Row
+#     return conn
 
 
 # ---------------- HOME ----------------
@@ -56,39 +66,32 @@ def login():
     username = request.form["username"].strip()
     password = request.form["password"].strip()
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        if role == "admin":
+            response = supabase.table("admins").select("*").eq("username", username).eq("password", password).execute()
+            admin = response.data[0] if response.data else None
 
-    if role == "admin":
-        cursor.execute(
-            "SELECT * FROM admins WHERE username=? AND password=?",
-            (username, password)
-        )
-        admin = cursor.fetchone()
-        conn.close()
+            if admin:
+                session["role"] = "admin"
+                session["username"] = admin["username"]
+                return redirect(url_for("admin_dashboard"))
+            return render_template("login.html", error="Invalid admin login credentials")
 
-        if admin:
-            session["role"] = "admin"
-            session["username"] = admin["username"]
-            return redirect(url_for("admin_dashboard"))
-        return render_template("login.html", error="Invalid admin login credentials")
+        elif role == "employee":
+            response = supabase.table("employees").select("*").eq("employee_id", username).eq("password", password).eq("status", "active").execute()
+            emp = response.data[0] if response.data else None
 
-    elif role == "employee":
-        cursor.execute(
-            "SELECT * FROM employees WHERE employee_id=? AND password=? AND status='active'",
-            (username, password)
-        )
-        emp = cursor.fetchone()
-        conn.close()
+            if emp:
+                session["role"] = "employee"
+                session["employee_id"] = emp["employee_id"]
+                session["employee_name"] = emp["name"]
+                return redirect(url_for("employee_home"))
+            return render_template("login.html", error="Invalid employee login credentials")
+            
+    except Exception as e:
+        print(f"Login Error: {e}", flush=True)
+        return render_template("login.html", error="Database connection error. Please ensure you have run the setup_supabase.sql script in your Supabase dashboard.")
 
-        if emp:
-            session["role"] = "employee"
-            session["employee_id"] = emp["employee_id"]
-            session["employee_name"] = emp["name"]
-            return redirect(url_for("employee_home"))
-        return render_template("login.html", error="Invalid employee login credentials")
-
-    conn.close()
     return "Invalid login"
 
 
@@ -98,29 +101,15 @@ def login():
 def logout():
     if session.get("role") == "employee":
         employee_id = session.get("employee_id")
-        today = datetime.now().strftime("%Y-%m-%d")
-        logout_time = datetime.now().strftime("%H:%M:%S")
+        today = get_now_ist().strftime("%Y-%m-%d")
+        logout_time = get_now_ist().strftime("%H:%M:%S")
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT * FROM attendance
-        WHERE employee_id=? AND date=?
-        """, (employee_id, today))
-
-        record = cursor.fetchone()
+        response = supabase.table("attendance").select("*").eq("employee_id", employee_id).eq("date", today).execute()
+        record = response.data[0] if response.data else None
 
         if record:
-            cursor.execute("""
-            UPDATE attendance
-            SET logout_time=?
-            WHERE employee_id=? AND date=?
-            """, (logout_time, employee_id, today))
-
-            conn.commit()
+            supabase.table("attendance").update({"logout_time": logout_time}).eq("employee_id", employee_id).eq("date", today).execute()
             print(f"DEBUG: Logout recorded for {employee_id}", flush=True)
-        conn.close()
 
     session.clear()
     return redirect(url_for("home"))
@@ -133,27 +122,16 @@ def admin_dashboard():
     if session.get("role") != "admin":
         return redirect(url_for("home"))
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    today = get_now_ist().strftime("%Y-%m-%d")
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    total_employees_resp = supabase.table("employees").select("*", count="exact").eq("status", "active").execute()
+    total_employees = total_employees_resp.count
 
-    cursor.execute("SELECT COUNT(*) FROM employees WHERE status='active'")
-    total_employees = cursor.fetchone()[0]
+    present_today_resp = supabase.table("attendance").select("*", count="exact").eq("date", today).eq("status", "Present").execute()
+    present_today = present_today_resp.count
 
-    cursor.execute(
-        "SELECT COUNT(*) FROM attendance WHERE date=? AND status='Present'",
-        (today,)
-    )
-    present_today = cursor.fetchone()[0]
-
-    cursor.execute(
-        "SELECT COUNT(*) FROM attendance WHERE date=? AND status='Absent'",
-        (today,)
-    )
-    absent_today = cursor.fetchone()[0]
-
-    conn.close()
+    absent_today_resp = supabase.table("attendance").select("*", count="exact").eq("date", today).eq("status", "Absent").execute()
+    absent_today = absent_today_resp.count
 
     return render_template(
         "admin_dashboard.html",
@@ -162,6 +140,19 @@ def admin_dashboard():
         absent_today=absent_today
     )
 
+
+
+# ---------------- DATA RESCUE ----------------
+@app.route("/admin/download_db")
+def download_db():
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+    from flask import send_file
+    import os
+    db_path = os.path.join(app.root_path, "database.db")
+    if os.path.exists(db_path):
+        return send_file(db_path, as_attachment=True, download_name="live_database.db")
+    return "Database not found."
 
 # ---------------- MANAGE ADMINS ----------------
 
@@ -172,20 +163,12 @@ def manage_admins():
 
     search = request.args.get("search", "").strip()
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
+    query = supabase.table("admins").select("*").order("id", desc=False)
     if search:
-        cursor.execute("""
-            SELECT * FROM admins
-            WHERE username LIKE ?
-            ORDER BY id ASC
-        """, (f"%{search}%",))
-    else:
-        cursor.execute("SELECT * FROM admins ORDER BY id ASC")
-
-    admins = cursor.fetchall()
-    conn.close()
+        query = query.ilike("username", f"%{search}%")
+    
+    response = query.execute()
+    admins = response.data
 
     return render_template("manage_admins.html", admins=admins, search=search)
 
@@ -198,20 +181,13 @@ def add_admin():
     username = request.form["username"].strip()
     password = request.form["password"].strip()
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("""
-            INSERT INTO admins (username, password)
-            VALUES (?, ?)
-        """, (username, password))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.close()
-        return "Admin username already exists"
+        supabase.table("admins").insert({"username": username, "password": password}).execute()
+    except Exception as e:
+        if "duplicate key" in str(e).lower():
+            return "Admin username already exists"
+        return f"Error: {str(e)}"
 
-    conn.close()
     return redirect(url_for("manage_admins"))
 
 
@@ -220,19 +196,7 @@ def delete_admin(id):
     if session.get("role") != "admin":
         return redirect(url_for("home"))
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Optional: Prevent deleting the super admin or yourself, but for now we allow deleting any
-    # Don't let them delete themselves:
-    # cursor.execute("SELECT username FROM admins WHERE id=?", (id,))
-    # adm = cursor.fetchone()
-    # if adm and adm["username"] == session.get("username"):
-    #     return "Cannot delete yourself!"
-
-    cursor.execute("DELETE FROM admins WHERE id=?", (id,))
-    conn.commit()
-    conn.close()
+    supabase.table("admins").delete().eq("id", id).execute()
 
     return redirect(url_for("manage_admins"))
 
@@ -244,11 +208,7 @@ def reset_admin_password(id):
     
     new_password = request.form.get("new_password", "").strip()
     if new_password:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE admins SET password=? WHERE id=?", (new_password, id))
-        conn.commit()
-        conn.close()
+        supabase.table("admins").update({"password": new_password}).eq("id", id).execute()
     
     return redirect(url_for("manage_admins"))
 
@@ -262,20 +222,12 @@ def manage_employees():
 
     search = request.args.get("search", "").strip()
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
+    query = supabase.table("employees").select("*").order("id", desc=True)
     if search:
-        cursor.execute("""
-            SELECT * FROM employees
-            WHERE employee_id LIKE ? OR name LIKE ?
-            ORDER BY id DESC
-        """, (f"%{search}%", f"%{search}%"))
-    else:
-        cursor.execute("SELECT * FROM employees ORDER BY id DESC")
-
-    employees = cursor.fetchall()
-    conn.close()
+        query = query.or_(f"employee_id.ilike.%{search}%,name.ilike.%{search}%")
+    
+    response = query.execute()
+    employees = response.data
 
     return render_template("manage_employees.html", employees=employees, search=search)
 
@@ -290,20 +242,19 @@ def add_employee():
     password = request.form["password"].strip()
     department = request.form["department"].strip()
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     try:
-        cursor.execute("""
-            INSERT INTO employees (employee_id, name, password, department, status)
-            VALUES (?, ?, ?, ?, 'active')
-        """, (emp_id, name, password, department))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.close()
-        return "Employee ID already exists"
+        supabase.table("employees").insert({
+            "employee_id": emp_id,
+            "name": name,
+            "password": password,
+            "department": department,
+            "status": "active"
+        }).execute()
+    except Exception as e:
+        if "duplicate key" in str(e).lower():
+            return "Employee ID already exists"
+        return f"Error: {str(e)}"
 
-    conn.close()
     return redirect(url_for("manage_employees"))
 
 
@@ -312,12 +263,7 @@ def delete_employee(id):
     if session.get("role") != "admin":
         return redirect(url_for("home"))
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("DELETE FROM employees WHERE id=?", (id,))
-    conn.commit()
-    conn.close()
+    supabase.table("employees").delete().eq("id", id).execute()
 
     return redirect(url_for("manage_employees"))
 
@@ -329,11 +275,7 @@ def reset_password(id):
     
     new_password = request.form.get("new_password", "").strip()
     if new_password:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE employees SET password=? WHERE id=?", (new_password, id))
-        conn.commit()
-        conn.close()
+        supabase.table("employees").update({"password": new_password}).eq("id", id).execute()
     
     return redirect(url_for("manage_employees"))
 
@@ -345,25 +287,54 @@ def attendance_reports():
     if session.get("role") != "admin":
         return redirect(url_for("home"))
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    # Get all records with employee names using inner join (handled by supabase relation)
+    response = supabase.table("attendance").select("*, employees(name)").order("date", desc=True).order("id", desc=True).execute()
+    records = response.data
 
-    # Get all records for the main table
-    cursor.execute("""
-        SELECT attendance.*, employees.name
-        FROM attendance
-        JOIN employees ON attendance.employee_id = employees.employee_id
-        ORDER BY attendance.date DESC, attendance.id DESC
-    """)
-    records = cursor.fetchall()
+    # Flatten names for compatibility with templates
+    for r in records:
+        if r.get('employees'):
+            r['name'] = r['employees'].get('name')
 
     # Get active employees for the download dropdown
-    cursor.execute("SELECT employee_id, name FROM employees WHERE status='active' ORDER BY name")
-    employees = cursor.fetchall()
+    emp_resp = supabase.table("employees").select("employee_id, name").eq("status", "active").order("name").execute()
+    employees = emp_resp.data
     
-    conn.close()
-
     return render_template("attendance_reports.html", records=records, employees=employees)
+
+
+@app.route("/admin/edit_attendance/<int:id>", methods=["POST"])
+def edit_attendance(id):
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+
+    morning = int(request.form.get("morning", 0))
+    afternoon = int(request.form.get("afternoon", 0))
+    morning_time = request.form.get("morning_time", "").strip()
+    afternoon_time = request.form.get("afternoon_time", "").strip()
+    logout_time = request.form.get("logout_time", "").strip()
+
+    # Recalculate status
+    if morning == 1 and afternoon == 1:
+        status = "Present"
+    elif morning == 1 or afternoon == 1:
+        status = "Half Day"
+    else:
+        status = "Absent"
+
+    try:
+        supabase.table("attendance").update({
+            "morning": morning,
+            "afternoon": afternoon,
+            "morning_time": morning_time,
+            "afternoon_time": afternoon_time,
+            "logout_time": logout_time,
+            "status": status
+        }).eq("id", id).execute()
+    except Exception as e:
+        print(f"Error editing attendance: {e}", flush=True)
+
+    return redirect(url_for("attendance_reports"))
 
 
 @app.route("/admin/download_report")
@@ -377,29 +348,20 @@ def download_report():
     if not employee_id or not month_str:
         return "Missing employee ID or month", 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
     # Get employee details
-    cursor.execute("SELECT name FROM employees WHERE employee_id=?", (employee_id,))
-    emp = cursor.fetchone()
+    emp_resp = supabase.table("employees").select("name").eq("employee_id", employee_id).execute()
+    emp = emp_resp.data[0] if emp_resp.data else None
     
     if not emp:
-        conn.close()
         return "Employee not found", 404
         
     emp_name = emp["name"]
 
     # Fetch records for that employee where the date starts with the selected YYYY-MM
-    search_pattern = f"{month_str}-%"
-    cursor.execute("""
-        SELECT date, morning, afternoon, status, logout_time
-        FROM attendance
-        WHERE employee_id=? AND date LIKE ?
-        ORDER BY date ASC
-    """, (employee_id, search_pattern))
-    records = cursor.fetchall()
-    conn.close()
+    start_date = f"{month_str}-01"
+    # To use ilike for month pattern:
+    records_resp = supabase.table("attendance").select("date, morning, afternoon, status, logout_time").eq("employee_id", employee_id).ilike("date", f"{month_str}-%").order("date", desc=False).execute()
+    records = records_resp.data
 
     # Create CSV in memory
     output = io.StringIO()
@@ -420,7 +382,7 @@ def download_report():
         logout_val = row['logout_time'] if row['logout_time'] else 'N/A'
         
         # Format date for better Excel compatibility
-        raw_date = row['date']
+        raw_date = str(row['date'])
         try:
             parsed_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d %b %Y")
         except:
@@ -467,25 +429,16 @@ def attendance_page():
         return redirect(url_for("home"))
 
     employee_id = session.get("employee_id")
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = get_now_ist().strftime("%Y-%m-%d")
     msg = request.args.get("msg", "")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    # Get attendance record
+    att_resp = supabase.table("attendance").select("*").eq("employee_id", employee_id).eq("date", today).execute()
+    record = att_resp.data[0] if att_resp.data else None
 
-    cursor.execute("""
-        SELECT * FROM attendance
-        WHERE employee_id=? AND date=?
-    """, (employee_id, today))
-    record = cursor.fetchone()
-
-    cursor.execute("""
-        SELECT * FROM employees
-        WHERE employee_id=?
-    """, (employee_id,))
-    employee = cursor.fetchone()
-
-    conn.close()
+    # Get employee details
+    emp_resp = supabase.table("employees").select("*").eq("employee_id", employee_id).execute()
+    employee = emp_resp.data[0] if emp_resp.data else None
 
     return render_template(
         "attendance.html",
@@ -495,8 +448,6 @@ def attendance_page():
     )
 
 
-# ---------------- MARK ATTENDANCE ----------------
-
 @app.route("/employee/mark_attendance", methods=["POST"])
 def mark_attendance():
     if session.get("role") != "employee":
@@ -504,6 +455,10 @@ def mark_attendance():
 
     employee_id = session.get("employee_id")
     period = request.form["period"]
+    
+    now = get_now_ist()
+    if now.weekday() == 6: # Sunday
+        return jsonify({"message": "Today is Sunday, a holiday", "status": "Error"}), 400
     
     # Geolocation check
     lat = request.form.get("lat")
@@ -523,103 +478,97 @@ def mark_attendance():
         return redirect(url_for("attendance_page", msg="Invalid location!"))
 
     distance = haversine(OFFICE_LAT, OFFICE_LNG, user_lat, user_lng)
+    print(f"DEBUG: Office ({OFFICE_LAT}, {OFFICE_LNG}) | User ({user_lat}, {user_lng}) | Distance: {distance}m", flush=True)
+    
     if distance > ALLOWED_RADIUS_METERS:
-        err_msg = f"You are {int(distance)} meters away. You must be within {ALLOWED_RADIUS_METERS} meters of the office."
+        err_msg = f"You are {int(distance)} meters away. (User: {user_lat}, {user_lng}). You must be within {ALLOWED_RADIUS_METERS} meters of the office."
         map_url = f"https://www.google.com/maps/search/?api=1&query={OFFICE_LAT},{OFFICE_LNG}"
         
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
             return jsonify({"message": err_msg, "status": "OutOfRange", "map_url": map_url}), 403
         return redirect(url_for("attendance_page", msg=err_msg))
 
-    now = datetime.now()
+    now = get_now_ist()
     today = now.strftime("%Y-%m-%d")
     current_time = now.strftime("%H:%M")
 
     morning_deadline = "10:10"
     afternoon_deadline = "14:10"
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT * FROM attendance
-        WHERE employee_id=? AND date=?
-    """, (employee_id, today))
-    record = cursor.fetchone()
+    # Check for existing record
+    try:
+        att_resp = supabase.table("attendance").select("*").eq("employee_id", employee_id).eq("date", today).execute()
+        record = att_resp.data[0] if att_resp.data else None
+    except Exception as e:
+        print(f"Supabase Error: {e}", flush=True)
+        error_msg = "Database connection error. Please ensure tables are created."
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+            return jsonify({"message": error_msg, "status": "Error"}), 500
+        return redirect(url_for("attendance_page", msg=error_msg))
 
     if not record:
-        cursor.execute("""
-            INSERT INTO attendance
-            (employee_id, date, morning, afternoon, status, logout_time)
-            VALUES (?, ?, 0, 0, 'Absent', '')
-        """, (employee_id, today))
-        conn.commit()
-
-        cursor.execute("""
-            SELECT * FROM attendance
-            WHERE employee_id=? AND date=?
-        """, (employee_id, today))
-        record = cursor.fetchone()
+        try:
+            record_resp = supabase.table("attendance").insert({
+                "employee_id": employee_id,
+                "date": today,
+                "morning": 0,
+            "afternoon": 0,
+            "morning_time": "",
+            "afternoon_time": "",
+            "status": "Absent",
+            "logout_time": ""
+        }).execute()
+            record = record_resp.data[0]
+        except Exception as e:
+            print(f"Supabase Insert Error: {e}", flush=True)
+            return "Database Error: Could not initialize attendance record.", 500
 
     message = ""
+    # Convert "HH:MM" to integer for robust comparison
+    val_now = now.hour * 100 + now.minute
+    
+    # Deadlines as integers: 10:10 -> 1010, 14:10 -> 1410, 13:45 -> 1345
+    morning_deadline_val = 1010
+    afternoon_start_val = 1345
+    afternoon_deadline_val = 1410
 
     if period == "morning":
         if record["morning"] == 1:
             message = "Morning attendance already marked"
-        elif current_time <= morning_deadline:
-            cursor.execute("""
-                UPDATE attendance
-                SET morning=1
-                WHERE employee_id=? AND date=?
-            """, (employee_id, today))
-            conn.commit()
-            message = "attendace should be mark on time"
+        elif val_now <= morning_deadline_val:
+            supabase.table("attendance").update({
+                "morning": 1,
+                "morning_time": now.strftime("%H:%M:%S")
+            }).eq("employee_id", employee_id).eq("date", today).execute()
+            message = "attendance marked"
+            record["morning"] = 1
         else:
             message = "Morning attendance already marked"
 
     elif period == "afternoon":
-        afternoon_start = "13:45"
         if record["afternoon"] == 1:
             message = "Afternoon attendance already marked"
-        elif current_time < afternoon_start:
-            message = "you can only mark after 1:45"
-        elif current_time <= afternoon_deadline:
-            cursor.execute("""
-                UPDATE attendance
-                SET afternoon=1
-                WHERE employee_id=? AND date=?
-            """, (employee_id, today))
-            conn.commit()
-            message = "attendace should be mark on time"
+        elif val_now < afternoon_start_val:
+            message = "mark after 1:45pm"
+        elif val_now <= afternoon_deadline_val:
+            supabase.table("attendance").update({
+                "afternoon": 1,
+                "afternoon_time": now.strftime("%H:%M:%S")
+            }).eq("employee_id", employee_id).eq("date", today).execute()
+            message = "attendance marked"
+            record["afternoon"] = 1
         else:
-            message = "the time is over attendance is already marked"
-
-    cursor.execute("""
-        SELECT * FROM attendance
-        WHERE employee_id=? AND date=?
-    """, (employee_id, today))
-    updated = cursor.fetchone()
+            message = "attendance marked already"
 
     # New attendance logic
-    if updated["morning"] == 1 and updated["afternoon"] == 1:
+    if record["morning"] == 1 and record["afternoon"] == 1:
         status = "Present"
-    elif updated["morning"] == 1 or updated["afternoon"] == 1:
+    elif record["morning"] == 1 or record["afternoon"] == 1:
         status = "Half Day"
     else:
         status = "Absent"
 
-    cursor.execute("""
-        UPDATE attendance
-        SET status=?
-        WHERE employee_id=? AND date=?
-    """, (status, employee_id, today))
-
-    conn.commit()
-    conn.close()
-
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
-       request.headers.get('Accept') == 'application/json':
-        return jsonify({"message": message, "status": status})
+    supabase.table("attendance").update({"status": status}).eq("employee_id", employee_id).eq("date", today).execute()
 
     return redirect(url_for("attendance_page", msg=message))
 
@@ -632,18 +581,21 @@ def get_attendance_status():
         return jsonify({"error": "Unauthorized"}), 401
 
     employee_id = session.get("employee_id")
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = get_now_ist().strftime("%Y-%m-%d")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT morning, afternoon, status FROM attendance
-        WHERE employee_id=? AND date=?
-    """, (employee_id, today))
-    record = cursor.fetchone()
+    # Get attendance record
+    att_resp = supabase.table("attendance").select("morning, afternoon, status").eq("employee_id", employee_id).eq("date", today).execute()
+    record = att_resp.data[0] if att_resp.data else None
     
-    now = datetime.now()
+    now = get_now_ist()
+    if now.weekday() == 6: # Sunday
+        return jsonify({
+            "morning": 0,
+            "afternoon": 0,
+            "status": "Holiday (Sunday)",
+            "message": "Today is Sunday, a holiday"
+        })
+
     current_time = now.strftime("%H:%M")
     morning_deadline = "10:10"
     afternoon_deadline = "14:10"
@@ -663,8 +615,6 @@ def get_attendance_status():
         else:
             status = "Pending"
 
-    conn.close()
-
     return jsonify({
         "morning": morning,
         "afternoon": afternoon,
@@ -682,39 +632,23 @@ def profile():
 
     employee_id = session.get("employee_id")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    # Get employee details
+    emp_resp = supabase.table("employees").select("*").eq("employee_id", employee_id).execute()
+    employee = emp_resp.data[0] if emp_resp.data else None
 
-    cursor.execute(
-        "SELECT * FROM employees WHERE employee_id=?",
-        (employee_id,)
-    )
-    employee = cursor.fetchone()
+    # Get attendance records
+    att_resp = supabase.table("attendance").select("*").eq("employee_id", employee_id).order("date", desc=True).execute()
+    records = att_resp.data
 
-    cursor.execute("""
-        SELECT * FROM attendance
-        WHERE employee_id=?
-        ORDER BY date DESC
-    """, (employee_id,))
-    records = cursor.fetchall()
+    # Aggregate statistics
+    present_resp = supabase.table("attendance").select("*", count="exact").eq("employee_id", employee_id).eq("status", "Present").execute()
+    present_count = present_resp.count
 
-    cursor.execute("""
-        SELECT COUNT(*) FROM attendance
-        WHERE employee_id=? AND status='Present'
-    """, (employee_id,))
-    present_count = cursor.fetchone()[0]
+    half_day_resp = supabase.table("attendance").select("*", count="exact").eq("employee_id", employee_id).eq("status", "Half Day").execute()
+    half_day_count = half_day_resp.count
 
-    cursor.execute("""
-        SELECT COUNT(*) FROM attendance
-        WHERE employee_id=? AND status='Half Day'
-    """, (employee_id,))
-    half_day_count = cursor.fetchone()[0]
-
-    cursor.execute("""
-        SELECT COUNT(*) FROM attendance
-        WHERE employee_id=?
-    """, (employee_id,))
-    total_days = cursor.fetchone()[0]
+    total_days_resp = supabase.table("attendance").select("*", count="exact").eq("employee_id", employee_id).execute()
+    total_days = total_days_resp.count
 
     # Calculate percentage: (Present + 0.5 * Half Day) / Total
     if total_days > 0:
@@ -722,8 +656,6 @@ def profile():
         percentage = round((attendance_value / total_days) * 100)
     else:
         percentage = 0
-
-    conn.close()
 
     return render_template(
         "profile.html",

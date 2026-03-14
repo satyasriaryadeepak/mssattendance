@@ -189,22 +189,40 @@ function updateStatusUI() {
             const bM = document.getElementById('btn-morning');
             const bA = document.getElementById('btn-afternoon');
             
+            if (data.status === "Holiday (Sunday)") {
+                if (bM) {
+                    bM.innerText = 'Sunday Holiday';
+                    bM.classList.add('btn-disabled-style');
+                    bM.style.pointerEvents = 'none';
+                }
+                if (bA) {
+                    bA.innerText = 'Sunday Holiday';
+                    bA.classList.add('btn-disabled-style');
+                    bA.style.pointerEvents = 'none';
+                }
+                return;
+            }
+
             if (bM) {
                 if (data.morning === 1) {
                     bM.innerText = 'Morning Marked';
                     bM.classList.add('btn-disabled-style');
+                    bM.style.pointerEvents = 'none';
                 } else {
                     bM.innerText = 'Mark Morning Attendance';
                     bM.classList.remove('btn-disabled-style');
+                    bM.style.pointerEvents = 'auto';
                 }
             }
             if (bA) {
                 if (data.afternoon === 1) {
                     bA.innerText = 'Afternoon Marked';
                     bA.classList.add('btn-disabled-style');
+                    bA.style.pointerEvents = 'none';
                 } else {
                     bA.innerText = 'Mark Afternoon Attendance';
                     bA.classList.remove('btn-disabled-style');
+                    bA.style.pointerEvents = 'auto';
                 }
             }
         })
@@ -328,12 +346,13 @@ function sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv) {
                  return;
             }
 
-            // "Pop" notification for early afternoon
-            if (data.message === "you can only mark after 1:45") {
+            // "Pop" notification for time-restricted messages
+            if (data.message === "mark after 1:45pm" || 
+                data.message === "attendance marked already" ||
+                data.message.includes('already') || 
+                data.message.includes('over')) {
+                
                 alert(data.message);
-                msgDiv.style.background = '#fef3c7'; // Amber warning
-                msgDiv.style.color = '#92400e';
-            } else if (data.message.includes('already') || data.message.includes('over')) {
                 msgDiv.style.background = '#fee2e2'; // Red error
                 msgDiv.style.color = '#991b1b';
             } else {
