@@ -29,6 +29,13 @@ CREATE TABLE IF NOT EXISTS attendance (
     UNIQUE(employee_id, date)
 );
 
+-- Create holidays table
+CREATE TABLE IF NOT EXISTS holidays (
+    id SERIAL PRIMARY KEY,
+    date DATE UNIQUE NOT NULL,
+    description TEXT
+);
+
 -- Insert a default admin if none exists
 INSERT INTO admins (username, password) 
 VALUES ('admin', 'admin123')

@@ -1,0 +1,11 @@
+Full Schema Check for 'attendance' table:
+Sample Record: {'id': 3, 'employee_id': 'INTM2601', 'date': '2026-03-16', 'morning': 1, 'afternoon': 0, 'status': 'Half Day', 'logout_time': '10:51:19'}
+Columns found: ['id', 'employee_id', 'date', 'morning', 'afternoon', 'status', 'logout_time']
+Column 'employee_id': EXISTS
+Column 'date': EXISTS
+Column 'morning': EXISTS
+Column 'afternoon': EXISTS
+Column 'morning_time': MISSING or ERROR ({'message': 'column attendance.morning_time does not exist', 'code': '42703', 'hint': None, 'details': None})
+Column 'afternoon_time': MISSING or ERROR ({'message': 'column attendance.afternoon_time does not exist', 'code': '42703', 'hint': None, 'details': None})
+Column 'status': EXISTS
+Column 'logout_time': EXISTS

@@ -1,0 +1,36 @@
+from supabase import create_client
+
+URL = "https://ytecwdhmuparsfcuzusm.supabase.co"
+KEY = "sb_publishable_klyKYGGpx1igJqXpb0YV2A_SYm0Asyk"
+supabase = create_client(URL, KEY)
+
+def check_schema():
+    print("Full Schema Check for 'attendance' table:")
+    try:
+        # Fetching a single record
+        res = supabase.table("attendance").select("*").limit(1).execute()
+        if res.data:
+            print(f"Sample Record: {res.data[0]}")
+            cols = res.data[0].keys()
+            print(f"Columns found: {list(cols)}")
+        else:
+            print("No records in table.")
+            
+        # Test specific columns to see if they produce errors
+        test_cols = [
+            "employee_id", "date", "morning", "afternoon", 
+            "morning_time", "afternoon_time", "status", "logout_time"
+        ]
+        
+        for col in test_cols:
+            try:
+                supabase.table("attendance").select(col).limit(1).execute()
+                print(f"Column '{col}': EXISTS")
+            except Exception as e:
+                print(f"Column '{col}': MISSING or ERROR ({e})")
+                
+    except Exception as e:
+        print(f"Error: {e}")
+
+if __name__ == "__main__":
+    check_schema()

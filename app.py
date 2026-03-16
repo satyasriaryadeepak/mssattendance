@@ -26,26 +26,17 @@ print(f"DEBUG: Initializing Supabase with URL: {SUPABASE_URL}", flush=True)
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 print("DEBUG: Supabase client initialized", flush=True)
 
-# --- Geofencing Configuration ---
-OFFICE_LAT = 17.452090
-OFFICE_LNG = 78.392460
-ALLOWED_RADIUS_METERS = 200
+def is_holiday(date_str):
+    """Check if a date is a holiday. Fails gracefully if table missing."""
+    try:
+        res = supabase.table("holidays").select("*").eq("date", date_str).execute()
+        return res.data[0] if res.data else None
+    except Exception as e:
+        # Silently fail if table doesn't exist yet
+        return None
 
-def haversine(lat1, lon1, lat2, lon2):
-    """
-    Calculate the great circle distance between two points 
-    on the earth (specified in decimal degrees)
-    """
-    # convert decimal degrees to radians 
-    lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
-
-    # haversine formula 
-    dlon = lon2 - lon1 
-    dlat = lat2 - lat1 
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a)) 
-    r = 6371000 # Radius of earth in meters
-    return c * r
+# --- Attendance Configuration ---
+# Geofencing removed per user request
 
 # Sqlite connection legacy (removed)
 # def get_db_connection():
@@ -107,7 +98,8 @@ def login():
 
 @app.route("/logout")
 def logout():
-    if session.get("role") == "employee":
+    record_logout = request.args.get("record") == "1"
+    if record_logout and session.get("role") == "employee":
         employee_id = session.get("employee_id")
         today = get_now_ist().strftime("%Y-%m-%d")
         logout_time = get_now_ist().strftime("%H:%M:%S")
@@ -131,15 +123,24 @@ def admin_dashboard():
         return redirect(url_for("home"))
 
     today = get_now_ist().strftime("%Y-%m-%d")
+    
+    # Check if today is a holiday
+    holiday = is_holiday(today)
 
     total_employees_resp = supabase.table("employees").select("*", count="exact").eq("status", "active").execute()
     total_employees = total_employees_resp.count
 
-    present_today_resp = supabase.table("attendance").select("*", count="exact").eq("date", today).eq("status", "Present").execute()
-    present_today = present_today_resp.count
+    if holiday:
+        present_today = total_employees
+    else:
+        try:
+            present_today_resp = supabase.table("attendance").select("*", count="exact").eq("date", today).in_("status", ["Present", "Half Day"]).execute()
+            present_today = present_today_resp.count
+        except:
+            present_today = 0
 
-    absent_today_resp = supabase.table("attendance").select("*", count="exact").eq("date", today).eq("status", "Absent").execute()
-    absent_today = absent_today_resp.count
+    # Absent is total active employees minus those currently marked Present
+    absent_today = total_employees - present_today
 
     return render_template(
         "admin_dashboard.html",
@@ -300,6 +301,38 @@ def reset_password(id):
     return redirect(url_for("manage_employees"))
 
 
+# ---------------- MANAGE HOLIDAYS ----------------
+
+@app.route("/admin/holidays")
+def manage_holidays():
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+    
+    holidays_data = supabase.table("holidays").select("*").order("date", desc=True).execute().data
+    return render_template("manage_holidays.html", holidays=holidays_data)
+
+@app.route("/admin/holidays/add", methods=["POST"])
+def add_holiday():
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+        
+    date_val = request.form.get("date")
+    description = request.form.get("description")
+    
+    if date_val:
+        supabase.table("holidays").insert({"date": date_val, "description": description}).execute()
+        
+    return redirect(url_for("manage_holidays"))
+
+@app.route("/admin/holidays/delete/<id>")
+def delete_holiday(id):
+    if session.get("role") != "admin":
+        return redirect(url_for("home"))
+        
+    supabase.table("holidays").delete().eq("id", id).execute()
+    return redirect(url_for("manage_holidays"))
+
+
 # ---------------- ADMIN REPORTS ----------------
 
 @app.route("/admin/reports")
@@ -307,27 +340,58 @@ def attendance_reports():
     if session.get("role") != "admin":
         return redirect(url_for("home"))
 
-    # Get all records with employee names using inner join (handled by supabase relation)
-    response = supabase.table("attendance").select("*, employees(name)").order("date", desc=True).order("id", desc=True).execute()
-    records = response.data
-
-    # Flatten names for compatibility with templates
-    for r in records:
-        if r.get('employees'):
-            r['name'] = r['employees'].get('name')
-
-    # Get active employees for the download dropdown
-    emp_resp = supabase.table("employees").select("employee_id, name").eq("status", "active").order("name").execute()
-    employees = emp_resp.data
+    # Select date (default to today)
+    today = get_now_ist().strftime("%Y-%m-%d")
     
-    return render_template("attendance_reports.html", records=records, employees=employees)
+    # Check holiday
+    holiday = is_holiday(today)
+    
+    # Get all active employees
+    emp_resp = supabase.table("employees").select("employee_id, name").eq("status", "active").order("name").execute()
+    all_employees = emp_resp.data if emp_resp.data else []
+    
+    # Get attendance records for today (or selected date filter)
+    # Note: If adding date filters in UI, this would use a requested date instead of 'today'
+    att_resp = supabase.table("attendance").select("*").eq("date", today).execute()
+    att_map = {a["employee_id"]: a for a in att_resp.data} if att_resp.data else {}
+
+    # Merge: ensure every active employee is represented
+    final_records = []
+    for emp in all_employees:
+        eid = emp["employee_id"]
+        if eid in att_map:
+            # Existing record
+            record = att_map[eid]
+            record["name"] = emp["name"] # Ensure name is present
+            if holiday:
+                record["status"] = "Holiday"
+            final_records.append(record)
+        else:
+            # Virtual record for Absent/Holiday employees
+            final_records.append({
+                "id": None, 
+                "employee_id": eid,
+                "name": emp["name"],
+                "date": today,
+                "morning": 0,
+                "afternoon": 0,
+                "morning_time": "-", # Restored columns
+                "afternoon_time": "-",
+                "status": "Holiday" if holiday else "Absent",
+                "logout_time": "-"
+            })
+
+    # Sort so Present employees are at top, or just follow original alphabetical order
+    return render_template("attendance_reports.html", records=final_records, employees=all_employees)
 
 
-@app.route("/admin/edit_attendance/<int:id>", methods=["POST"])
-def edit_attendance(id):
+@app.route("/admin/save_attendance", methods=["POST"])
+def save_attendance():
     if session.get("role") != "admin":
         return redirect(url_for("home"))
 
+    employee_id = request.form.get("employee_id")
+    date = request.form.get("date")
     morning = int(request.form.get("morning", 0))
     afternoon = int(request.form.get("afternoon", 0))
     morning_time = request.form.get("morning_time", "").strip()
@@ -343,18 +407,35 @@ def edit_attendance(id):
         status = "Absent"
 
     try:
-        supabase.table("attendance").update({
+        data = {
+            "employee_id": employee_id,
+            "date": date,
             "morning": morning,
             "afternoon": afternoon,
-            "morning_time": morning_time,
-            "afternoon_time": afternoon_time,
+            # "morning_time": morning_time, # RE-DISABLED UNTIL SQL IS RUN
+            # "afternoon_time": afternoon_time,
             "logout_time": logout_time,
             "status": status
-        }).eq("id", id).execute()
+        }
+        
+        # Explicit check-then-act logic instead of upsert to avoid schema cache issues
+        existing = supabase.table("attendance").select("id").eq("employee_id", employee_id).eq("date", date).execute()
+        
+        if existing.data:
+            supabase.table("attendance").update(data).eq("id", existing.data[0]["id"]).execute()
+        else:
+            supabase.table("attendance").insert(data).execute()
+            
     except Exception as e:
-        print(f"Error editing attendance: {e}", flush=True)
+        print(f"Error saving attendance: {e}", flush=True)
 
     return redirect(url_for("attendance_reports"))
+
+
+@app.route("/admin/edit_attendance/<int:id>", methods=["POST"])
+def edit_attendance(id):
+    # This route is now legacy but kept for potential direct calls
+    return save_attendance()
 
 
 @app.route("/admin/download_report")
@@ -471,126 +552,106 @@ def attendance_page():
 @app.route("/employee/mark_attendance", methods=["POST"])
 def mark_attendance():
     if session.get("role") != "employee":
-        return redirect(url_for("home"))
-
-    employee_id = session.get("employee_id")
-    period = request.form["period"]
-    
-    now = get_now_ist()
-    if now.weekday() == 6: # Sunday
-        return jsonify({"message": "Today is Sunday, a holiday", "status": "Error"}), 400
-    
-    # Geolocation check
-    lat = request.form.get("lat")
-    lng = request.form.get("lng")
-    
-    if not lat or not lng:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
-            return jsonify({"message": "Location access is required to mark attendance.", "status": "Error"}), 400
-        return redirect(url_for("attendance_page", msg="Location required!"))
+        return jsonify({"message": "Unauthorized", "status": "Error"}), 401
 
     try:
-        user_lat = float(lat)
-        user_lng = float(lng)
-    except ValueError:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
-            return jsonify({"message": "Invalid location coordinates.", "status": "Error"}), 400
-        return redirect(url_for("attendance_page", msg="Invalid location!"))
-
-    distance = haversine(OFFICE_LAT, OFFICE_LNG, user_lat, user_lng)
-    print(f"DEBUG: Office ({OFFICE_LAT}, {OFFICE_LNG}) | User ({user_lat}, {user_lng}) | Distance: {distance}m", flush=True)
-    
-    if distance > ALLOWED_RADIUS_METERS:
-        err_msg = f"You are {int(distance)} meters away. (User: {user_lat}, {user_lng}). You must be within {ALLOWED_RADIUS_METERS} meters of the office."
-        map_url = f"https://www.google.com/maps/search/?api=1&query={OFFICE_LAT},{OFFICE_LNG}"
+        employee_id = session.get("employee_id")
+        period = request.form.get("period")
+        lat = request.form.get("lat")
+        lng = request.form.get("lng")
         
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
-            return jsonify({"message": err_msg, "status": "OutOfRange", "map_url": map_url}), 403
-        return redirect(url_for("attendance_page", msg=err_msg))
+        now = get_now_ist()
+        today = now.strftime("%Y-%m-%d")
+        
+        # 1. Sunday Check
+        if now.weekday() == 6: # Sunday
+            return jsonify({"message": "Today is Sunday, a holiday", "status": "Error"}), 400
+        
+        # 2. Skip Geolocation (Removed per user request)
 
-    now = get_now_ist()
-    today = now.strftime("%Y-%m-%d")
-    current_time = now.strftime("%H:%M")
-
-    morning_deadline = "10:10"
-    afternoon_deadline = "14:10"
-
-    # Check for existing record
-    try:
+        # 3. Get or Initialize record
         att_resp = supabase.table("attendance").select("*").eq("employee_id", employee_id).eq("date", today).execute()
         record = att_resp.data[0] if att_resp.data else None
-    except Exception as e:
-        print(f"Supabase Error: {e}", flush=True)
-        error_msg = "Database connection error. Please ensure tables are created."
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
-            return jsonify({"message": error_msg, "status": "Error"}), 500
-        return redirect(url_for("attendance_page", msg=error_msg))
 
-    if not record:
-        try:
-            record_resp = supabase.table("attendance").insert({
+        if not record:
+            # Upsert into attendance to ensure initial record exists
+            init_data = {
                 "employee_id": employee_id,
                 "date": today,
                 "morning": 0,
-            "afternoon": 0,
-            "morning_time": "",
-            "afternoon_time": "",
-            "status": "Absent",
-            "logout_time": ""
-        }).execute()
+                "afternoon": 0,
+                "status": "Absent",
+                "logout_time": ""
+            }
+            record_resp = supabase.table("attendance").insert(init_data).execute()
+            if not record_resp.data:
+                return jsonify({"message": "Failed to initialize attendance record.", "status": "Error"}), 500
             record = record_resp.data[0]
-        except Exception as e:
-            print(f"Supabase Insert Error: {e}", flush=True)
-            return "Database Error: Could not initialize attendance record.", 500
 
-    message = ""
-    # Convert "HH:MM" to integer for robust comparison
-    val_now = now.hour * 100 + now.minute
-    
-    # Deadlines as integers: 10:10 -> 1010, 14:10 -> 1410, 13:45 -> 1345
-    morning_deadline_val = 1010
-    afternoon_start_val = 1345
-    afternoon_deadline_val = 1410
+        # 4. Marking Logic
+        val_now = now.hour * 100 + now.minute
+        morning_deadline_val = 1010
+        afternoon_start_val = 1345
+        afternoon_deadline_val = 1410
+        
+        update_data = {}
+        message = ""
+        success = True
 
-    if period == "morning":
-        if record["morning"] == 1:
-            message = "Morning attendance already marked"
-        elif val_now <= morning_deadline_val:
-            supabase.table("attendance").update({
-                "morning": 1,
-                "morning_time": now.strftime("%H:%M:%S")
-            }).eq("employee_id", employee_id).eq("date", today).execute()
-            message = "attendance marked"
-            record["morning"] = 1
+        if period == "morning":
+            if record["morning"] == 1:
+                message = "Morning attendance already marked"
+                success = False
+            elif val_now <= morning_deadline_val:
+                update_data["morning"] = 1
+                # update_data["morning_time"] = now.strftime("%H:%M:%S")
+                message = "Morning attendance marked"
+                record["morning"] = 1
+            else:
+                message = "Morning attendance deadline (10:10 AM) has passed"
+                success = False
+
+        elif period == "afternoon":
+            if record["afternoon"] == 1:
+                message = "Afternoon attendance already marked"
+                success = False
+            elif val_now < afternoon_start_val:
+                message = "Please mark after 1:45 PM"
+                success = False
+            elif val_now <= afternoon_deadline_val:
+                update_data["afternoon"] = 1
+                # update_data["afternoon_time"] = now.strftime("%H:%M:%S")
+                message = "Afternoon attendance marked"
+                record["afternoon"] = 1
+            else:
+                message = "Afternoon attendance deadline (2:10 PM) has passed"
+                success = False
         else:
-            message = "Morning attendance already marked"
+            return jsonify({"message": "Invalid period", "status": "Error"}), 400
 
-    elif period == "afternoon":
-        if record["afternoon"] == 1:
-            message = "Afternoon attendance already marked"
-        elif val_now < afternoon_start_val:
-            message = "mark after 1:45pm"
-        elif val_now <= afternoon_deadline_val:
-            supabase.table("attendance").update({
-                "afternoon": 1,
-                "afternoon_time": now.strftime("%H:%M:%S")
-            }).eq("employee_id", employee_id).eq("date", today).execute()
-            message = "attendance marked"
-            record["afternoon"] = 1
-        else:
-            message = "attendance marked already"
+        # 5. Perform Update and Status Calculation
+        if update_data:
+            # Recalculate status
+            if record["morning"] == 1 and record["afternoon"] == 1:
+                status = "Present"
+            elif record["morning"] == 1 or record["afternoon"] == 1:
+                status = "Half Day"
+            else:
+                status = "Absent"
+            
+            update_data["status"] = status
+            supabase.table("attendance").update(update_data).eq("employee_id", employee_id).eq("date", today).execute()
 
-    # New attendance logic
-    if record["morning"] == 1 and record["afternoon"] == 1:
-        status = "Present"
-    elif record["morning"] == 1 or record["afternoon"] == 1:
-        status = "Half Day"
-    else:
-        status = "Absent"
+        return jsonify({
+            "message": message, 
+            "status": "Success" if success else "Error",
+            "morning": record["morning"],
+            "afternoon": record["afternoon"]
+        }), 200 if success else 400
 
-    supabase.table("attendance").update({"status": status}).eq("employee_id", employee_id).eq("date", today).execute()
-
-    return redirect(url_for("attendance_page", msg=message))
+    except Exception as e:
+        print(f"Attendance Marking Error: {e}", flush=True)
+        return jsonify({"message": f"Server Error: {str(e)}", "status": "Error"}), 500
 
 
 # ---------------- API FOR LIVE UPDATES ----------------

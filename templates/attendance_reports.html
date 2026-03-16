@@ -25,6 +25,7 @@
             <a href="/admin/employees">Employees</a>
             <a href="/admin/admins">Admins</a>
             <a href="/admin/reports" class="active">Reports</a>
+            <a href="/admin/holidays">Holidays</a>
             <a href="/logout">Logout</a>
         </nav>
     </aside>
@@ -81,10 +82,10 @@
                             <td>{{ row.employee_id }}</td>
                             <td>{{ row.date }}</td>
                             <td id="morning-{{ row.id }}">{% if row.morning == 1 %}Marked{% else %}None{% endif %}</td>
-                            <td>{{ row.morning_time or 'N/A' }}</td>
+                            <td>{{ row.morning_time or '-' }}</td>
                             <td id="afternoon-{{ row.id }}">{% if row.afternoon == 1 %}Marked{% else %}None{% endif %}</td>
-                            <td>{{ row.afternoon_time or 'N/A' }}</td>
-                            <td>{{ row.logout_time or 'N/A' }}</td>
+                            <td>{{ row.afternoon_time or '-' }}</td>
+                            <td>{{ row.logout_time or '-' }}</td>
                             <td>
                                 {% if row.status == 'Present' %}
                                     <span class="status-pill success">{{ row.status }}</span>
@@ -95,7 +96,17 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <button class="primary-btn sm-btn" onclick='openEditModal("{{ row.id }}", "{{ row.name }}", "{{ row.morning }}", "{{ row.afternoon }}", "{{ row.morning_time|default("") }}", "{{ row.afternoon_time|default("") }}", "{{ row.logout_time|default("") }}")'>Edit</button>
+                                <button class="primary-btn sm-btn" 
+                                    data-id="{{ row.id or '' }}"
+                                    data-eid="{{ row.employee_id }}"
+                                    data-name="{{ (row.name or '') }}"
+                                    data-date="{{ row.date }}"
+                                    data-morning="{{ row.morning or 0 }}"
+                                    data-afternoon="{{ row.afternoon or 0 }}"
+                                    data-morning-time="{{ row.morning_time or '' }}"
+                                    data-afternoon-time="{{ row.afternoon_time or '' }}"
+                                    data-logout="{{ row.logout_time or '' }}"
+                                    onclick="openEditModalFromButton(this)">Edit</button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -117,7 +128,10 @@
             <h3>Edit Attendance</h3>
             <button class="close-btn" onclick="closeEditModal()">&times;</button>
         </div>
-        <form id="editForm" method="POST" action="">
+        <form id="editForm" method="POST" action="/admin/save_attendance">
+            <input type="hidden" name="id" id="editRowId">
+            <input type="hidden" name="employee_id" id="editEmployeeId">
+            <input type="hidden" name="date" id="editDate">
             <p id="editEmpName" style="font-weight: 600; margin-bottom: 20px; color: var(--primary);"></p>
             
             <div class="form-group" style="margin-bottom: 15px;">
@@ -132,7 +146,7 @@
                 <label>Morning Time (HH:MM:SS)</label>
                 <input type="text" name="morning_time" id="editMorningTime" placeholder="HH:MM:SS">
             </div>
-            
+
             <div class="form-group" style="margin-bottom: 15px;">
                 <label>Afternoon Status</label>
                 <select name="afternoon" id="editAfternoon" required>
@@ -183,13 +197,30 @@
 </style>
 
 <script>
-    function openEditModal(id, name, morning, afternoon, morning_time, afternoon_time, logout) {
-        document.getElementById('editForm').action = '/admin/edit_attendance/' + id;
-        document.getElementById('editEmpName').innerText = 'Employee: ' + name;
+    function openEditModalFromButton(btn) {
+        openEditModal(
+            btn.getAttribute('data-id'),
+            btn.getAttribute('data-eid'),
+            btn.getAttribute('data-name'),
+            btn.getAttribute('data-date'),
+            btn.getAttribute('data-morning'),
+            btn.getAttribute('data-afternoon'),
+            btn.getAttribute('data-morning-time'),
+            btn.getAttribute('data-afternoon-time'),
+            btn.getAttribute('data-logout')
+        );
+    }
+
+    function openEditModal(id, employee_id, name, date, morning, afternoon, morning_time, afternoon_time, logout) {
+        console.log("Opening edit modal for:", {id, employee_id, name, date});
+        document.getElementById('editRowId').value = id;
+        document.getElementById('editEmployeeId').value = employee_id;
+        document.getElementById('editDate').value = date;
+        document.getElementById('editEmpName').innerText = 'Employee: ' + name + ' | Date: ' + date;
         document.getElementById('editMorning').value = morning;
         document.getElementById('editAfternoon').value = afternoon;
-        document.getElementById('editMorningTime').value = morning_time !== 'None' ? morning_time : '';
-        document.getElementById('editAfternoonTime').value = afternoon_time !== 'None' ? afternoon_time : '';
+        document.getElementById('editMorningTime').value = morning_time && morning_time !== 'None' ? morning_time : '';
+        document.getElementById('editAfternoonTime').value = afternoon_time && afternoon_time !== 'None' ? afternoon_time : '';
         document.getElementById('editLogoutTime').value = logout !== 'None' ? logout : '';
         document.getElementById('editModal').style.display = 'flex';
     }

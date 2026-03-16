@@ -76,7 +76,13 @@
     </section>
 
     <!-- FULL MAIN SECTION -->
-    <section class="attendance-full-section">
+        {% if holiday %}
+        <div class="glass-card holiday-alert" style="border: 2px border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 30px; background: rgba(59, 130, 246, 0.1);">
+            <h2 style="color: #3b82f6; margin-bottom: 10px;">🎉 Today is a Holiday: {{ holiday.description }}</h2>
+            <p>The system has automatically marked you as present. You do not need to mark attendance today.</p>
+        </div>
+        {% endif %}
+
         <span class="hero-tag">Attendance Portal</span>
         <h1>Mark Your Attendance</h1>
         <p>
@@ -89,15 +95,17 @@
                 class="primary-btn attendance-full-btn" 
                 onclick="markAttendance('morning')"
                 id="btn-morning"
+                {% if holiday %}disabled style="opacity: 0.5; cursor: not-allowed;" title="Disabled on holidays"{% endif %}
             >Mark Morning Attendance</button>
             
             <button 
                 class="secondary-btn attendance-full-btn" 
                 onclick="markAttendance('afternoon')"
                 id="btn-afternoon"
+                {% if holiday %}disabled style="opacity: 0.5; cursor: not-allowed;" title="Disabled on holidays"{% endif %}
             >Mark Afternoon Attendance</button>
             
-            <a href="/logout" class="logout-attendance-btn">Logout</a>
+            <a href="/logout?record=1" class="logout-attendance-btn">Logout</a>
         </div>
 
         <div id="attendance-msg" class="attendance-full-message" style="display: none;"></div>
@@ -236,7 +244,7 @@ function markAttendance(period) {
     
     if (serverMsg) serverMsg.style.display = 'none';
     if (msgDiv) {
-        msgDiv.innerText = 'Requesting location...';
+        msgDiv.innerText = 'Communicating with server...';
         msgDiv.style.display = 'block';
         msgDiv.style.background = '#eff6ff'; // Light blue info
     }
@@ -247,55 +255,15 @@ function markAttendance(period) {
         btn.style.pointerEvents = 'none';
     }
 
-    if (!navigator.geolocation) {
-         if (msgDiv) {
-             msgDiv.innerText = 'Geolocation is not supported by your browser.';
-             msgDiv.style.background = '#fee2e2'; // Red error
-             msgDiv.style.color = '#991b1b';
-         }
-         if (btn) {
-             btn.innerText = originalText;
-             btn.style.pointerEvents = 'auto';
-         }
-         return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-        function(position) {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv);
-        },
-        function(error) {
-            let errorMsg = 'Unknown location error.';
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    errorMsg = "Location permission denied. Please allow location access to mark attendance.";
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    errorMsg = "Location information is unavailable.";
-                    break;
-                case error.TIMEOUT:
-                    errorMsg = "The request to get user location timed out.";
-                    break;
-            }
-            if (msgDiv) {
-                msgDiv.innerText = errorMsg;
-                msgDiv.style.background = '#fee2e2'; // Red error
-                msgDiv.style.color = '#991b1b';
-            }
-            if (btn) {
-                btn.innerText = originalText;
-                btn.style.pointerEvents = 'auto';
-            }
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+    // Directly send request without geolocation
+    sendAttendanceRequest(period, null, null, btn, originalText, msgDiv);
 }
 
 function sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv) {
     if (msgDiv) {
         msgDiv.innerText = 'Communicating with server...';
+        msgDiv.style.background = '#eff6ff';
+        msgDiv.style.color = '#1e40af';
     }
 
     const formData = new FormData();
@@ -316,50 +284,42 @@ function sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv) {
         const data = isJson ? await response.json() : null;
 
         if (!response.ok) {
-            if (data && data.message) {
-                return { message: data.message, status: data.status || 'Error', map_url: data.map_url };
-            }
-            throw new Error('Status: ' + response.status);
+            // Include data if available, otherwise fallback to status
+            if (data) return data;
+            throw new Error('Server Error: ' + response.status);
         }
         return data;
     })
     .then(data => {
+        if (!data) throw new Error('Empty response from server');
+
         if (msgDiv) {
             msgDiv.innerText = data.message;
             msgDiv.style.display = 'block';
             
-            
-            if (data.status === 'Error') {
-                 msgDiv.style.background = '#fee2e2'; // Red error
-                 msgDiv.style.color = '#991b1b';
-                 return;
-            }
-            
-            if (data.status === 'OutOfRange') {
-                 msgDiv.style.background = '#fef3c7'; // Amber warning
-                 msgDiv.style.color = '#92400e';
-                 if (data.map_url) {
-                      setTimeout(() => {
-                          window.open(data.map_url, '_blank');
-                      }, 2000); // Wait 2s before opening map so they can read the error message
-                 }
-                 return;
-            }
-
-            // "Pop" notification for time-restricted messages
-            if (data.message === "mark after 1:45pm" || 
-                data.message === "attendance marked already" ||
-                data.message.includes('already') || 
-                data.message.includes('over')) {
-                
-                alert(data.message);
-                msgDiv.style.background = '#fee2e2'; // Red error
-                msgDiv.style.color = '#991b1b';
-            } else {
+            if (data.status === 'Success') {
                 msgDiv.style.background = '#dcfce7'; // Green success
                 msgDiv.style.color = '#166534';
+            } else if (data.status === 'OutOfRange') {
+                msgDiv.style.background = '#fef3c7'; // Amber warning
+                msgDiv.style.color = '#92400e';
+                if (data.map_url) {
+                    setTimeout(() => {
+                        if (confirm('You are out of range. Open office location in Google Maps?')) {
+                            window.open(data.map_url, '_blank');
+                        }
+                    }, 1000);
+                }
+            } else {
+                msgDiv.style.background = '#fee2e2'; // Red error
+                msgDiv.style.color = '#991b1b';
+                // Show alert for logic-based errors (e.g. deadline pass, already marked)
+                if (data.message && (data.message.includes('already') || data.message.includes('deadline') || data.message.includes('after'))) {
+                     alert(data.message);
+                }
             }
         }
+
         if (btn) {
             btn.innerText = originalText;
             btn.style.pointerEvents = 'auto';
@@ -369,7 +329,7 @@ function sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv) {
     .catch(err => {
         console.error('API Error:', err);
         if (msgDiv) {
-            msgDiv.innerText = err.message || 'Server Error. Please check logs.';
+            msgDiv.innerText = err.message || 'Network error or server down.';
             msgDiv.style.display = 'block';
             msgDiv.style.background = '#fee2e2';
             msgDiv.style.color = '#991b1b';

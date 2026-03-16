@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Holidays - MSSquare Technologies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="panel-body">
+
+<div class="panel-layout">
+    <aside class="panel-sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo">
+                <img src="{{ url_for('static', filename='css/images/logo.png') }}" alt="Logo">
+            </div>
+            <div>
+                <h2>MSSquare</h2>
+                <p>Technologies</p>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/employees">Employees</a>
+            <a href="/admin/admins">Admins</a>
+            <a href="/admin/reports">Reports</a>
+            <a href="/admin/holidays" class="active">Holidays</a>
+            <a href="/logout">Logout</a>
+        </nav>
+    </aside>
+
+    <main class="panel-main">
+        <div class="panel-topbar">
+            <div>
+                <h1>Manage Holidays</h1>
+                <p>Declare and manage company holidays</p>
+            </div>
+        </div>
+
+        <section class="glass-card">
+            <h3>Add Holiday</h3>
+            <form method="POST" action="/admin/holidays/add" class="modern-form-grid">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" name="date" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" name="description" placeholder="e.g. Independence Day" required>
+                </div>
+                <div class="form-group" style="display: flex; align-items: flex-end;">
+                    <button class="primary-btn" type="submit">Add Holiday</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="glass-card table-card">
+            <h3>Holiday List</h3>
+            <div class="table-wrap">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in holidays %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ h.date }}</td>
+                            <td>{{ h.description }}</td>
+                            <td>
+                                <a class="table-btn danger-btn" href="/admin/holidays/delete/{{ h.id }}" onclick="return confirm('Are you sure?')">Delete</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="panel-footer">
+            © 2026 MSSquare Technologies • Employee Attendance Management System
+        </footer>
+    </main>
+</div>
+
+</body>
+</html>
