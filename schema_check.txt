@@ -1,0 +1,4 @@
+Checking attendance table columns...
+Columns: ['id', 'employee_id', 'date', 'morning', 'afternoon', 'status', 'logout_time']
+Column 'morning_time' does NOT exist or error: {'message': 'column attendance.morning_time does not exist', 'code': '42703', 'hint': None, 'details': None}
+Column 'afternoon_time' does NOT exist or error: {'message': 'column attendance.afternoon_time does not exist', 'code': '42703', 'hint': None, 'details': None}

@@ -213,15 +213,19 @@
 
     function openEditModal(id, employee_id, name, date, morning, afternoon, morning_time, afternoon_time, logout) {
         console.log("Opening edit modal for:", {id, employee_id, name, date});
-        document.getElementById('editRowId').value = id;
+        document.getElementById('editRowId').value = id || '';
         document.getElementById('editEmployeeId').value = employee_id;
         document.getElementById('editDate').value = date;
         document.getElementById('editEmpName').innerText = 'Employee: ' + name + ' | Date: ' + date;
-        document.getElementById('editMorning').value = morning;
-        document.getElementById('editAfternoon').value = afternoon;
-        document.getElementById('editMorningTime').value = morning_time && morning_time !== 'None' ? morning_time : '';
-        document.getElementById('editAfternoonTime').value = afternoon_time && afternoon_time !== 'None' ? afternoon_time : '';
-        document.getElementById('editLogoutTime').value = logout !== 'None' ? logout : '';
+        document.getElementById('editMorning').value = morning || '0';
+        document.getElementById('editAfternoon').value = afternoon || '0';
+        
+        // Clean up time strings (handle '-' or 'null' from DB)
+        const cleanTime = (t) => (t && t !== 'None' && t !== '-' && t !== 'null') ? t : '';
+        
+        document.getElementById('editMorningTime').value = cleanTime(morning_time);
+        document.getElementById('editAfternoonTime').value = cleanTime(afternoon_time);
+        document.getElementById('editLogoutTime').value = cleanTime(logout);
         document.getElementById('editModal').style.display = 'flex';
     }
 

@@ -375,7 +375,7 @@ def attendance_reports():
                 "date": today,
                 "morning": 0,
                 "afternoon": 0,
-                "morning_time": "-", # Restored columns
+                "morning_time": "-",
                 "afternoon_time": "-",
                 "status": "Holiday" if holiday else "Absent",
                 "logout_time": "-"
@@ -412,8 +412,8 @@ def save_attendance():
             "date": date,
             "morning": morning,
             "afternoon": afternoon,
-            # "morning_time": morning_time, # RE-DISABLED UNTIL SQL IS RUN
-            # "afternoon_time": afternoon_time,
+            "morning_time": morning_time,
+            "afternoon_time": afternoon_time,
             "logout_time": logout_time,
             "status": status
         }
@@ -421,6 +421,7 @@ def save_attendance():
         # Explicit check-then-act logic instead of upsert to avoid schema cache issues
         existing = supabase.table("attendance").select("id").eq("employee_id", employee_id).eq("date", date).execute()
         
+        print(f"DEBUG Admin Save: {employee_id} on {date} - Morning: {morning} Afternoon: {afternoon}", flush=True)
         if existing.data:
             supabase.table("attendance").update(data).eq("id", existing.data[0]["id"]).execute()
         else:
@@ -444,68 +445,90 @@ def download_report():
         return redirect(url_for("home"))
 
     employee_id = request.args.get("employee_id")
-    month_str = request.args.get("month") # format YYYY-MM
-    
+    month_str = request.args.get("month")  # format YYYY-MM
+
     if not employee_id or not month_str:
         return "Missing employee ID or month", 400
 
-    # Get employee details
-    emp_resp = supabase.table("employees").select("name").eq("employee_id", employee_id).execute()
-    emp = emp_resp.data[0] if emp_resp.data else None
-    
-    if not emp:
-        return "Employee not found", 404
-        
-    emp_name = emp["name"]
+    try:
+        # Get employee details
+        emp_resp = supabase.table("employees").select("name").eq("employee_id", employee_id).execute()
+        emp = emp_resp.data[0] if emp_resp.data else None
 
-    # Fetch records for that employee where the date starts with the selected YYYY-MM
-    start_date = f"{month_str}-01"
-    # To use ilike for month pattern:
-    records_resp = supabase.table("attendance").select("date, morning, afternoon, status, logout_time").eq("employee_id", employee_id).ilike("date", f"{month_str}-%").order("date", desc=False).execute()
-    records = records_resp.data
+        if not emp:
+            return "Employee not found", 404
 
-    # Create CSV in memory
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    # Write Header row
-    writer.writerow(['Monthly Attendance Report'])
-    writer.writerow(['Employee Name:', emp_name])
-    writer.writerow(['Employee ID:', employee_id])
-    writer.writerow(['Month:', month_str])
-    writer.writerow([]) # Empty row for spacing
-    writer.writerow(['Date', 'Morning Status', 'Afternoon Status', 'Final Status', 'Logout Time'])
-    
-    # Write data rows
-    for row in records:
-        morning_val = 'Marked' if row['morning'] == 1 else 'Not Marked'
-        afternoon_val = 'Marked' if row['afternoon'] == 1 else 'Not Marked'
-        logout_val = row['logout_time'] if row['logout_time'] else 'N/A'
-        
-        # Format date for better Excel compatibility
-        raw_date = str(row['date'])
-        try:
-            parsed_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d %b %Y")
-        except:
-            parsed_date = raw_date
-        
-        writer.writerow([
-            parsed_date,
-            morning_val,
-            afternoon_val,
-            row['status'],
-            logout_val
-        ])
+        emp_name = emp["name"]
 
-    # Convert to response (add UTF-8 BOM for Excel)
-    csv_data = "\ufeff" + output.getvalue()
-    filename = f"Attendance_{employee_id}_{month_str}.csv"
+        # Calculate first and last day of the selected month for gte/lte range filter
+        # (ilike does not work on Supabase date-type columns)
+        import calendar
+        year, month = int(month_str.split("-")[0]), int(month_str.split("-")[1])
+        start_date = f"{month_str}-01"
+        last_day = calendar.monthrange(year, month)[1]
+        end_date = f"{month_str}-{last_day:02d}"
 
-    return Response(
-        csv_data,
-        mimetype="text/csv",
-        headers={"Content-disposition": f"attachment; filename={filename}"}
-    )
+        records_resp = (
+            supabase.table("attendance")
+            .select("date, morning, afternoon, morning_time, afternoon_time, status, logout_time")
+            .eq("employee_id", employee_id)
+            .gte("date", start_date)
+            .lte("date", end_date)
+            .order("date", desc=False)
+            .execute()
+        )
+        records = records_resp.data
+
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Write header rows
+        writer.writerow(['Monthly Attendance Report'])
+        writer.writerow(['Employee Name:', emp_name])
+        writer.writerow(['Employee ID:', employee_id])
+        writer.writerow(['Month:', month_str])
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(['Date', 'Morning Status', 'Morning Time', 'Afternoon Status', 'Afternoon Time', 'Final Status', 'Logout Time'])
+
+        # Write data rows
+        for row in records:
+            morning_val = 'Marked' if row.get('morning') == 1 else 'Not Marked'
+            afternoon_val = 'Marked' if row.get('afternoon') == 1 else 'Not Marked'
+            morning_time_val = row.get('morning_time') or 'N/A'
+            afternoon_time_val = row.get('afternoon_time') or 'N/A'
+            logout_val = row.get('logout_time') or 'N/A'
+
+            # Format date for better Excel compatibility
+            raw_date = str(row['date'])
+            try:
+                parsed_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d %b %Y")
+            except Exception:
+                parsed_date = raw_date
+
+            writer.writerow([
+                parsed_date,
+                morning_val,
+                morning_time_val,
+                afternoon_val,
+                afternoon_time_val,
+                row.get('status', 'N/A'),
+                logout_val
+            ])
+
+        # Convert to response (add UTF-8 BOM for Excel compatibility)
+        csv_data = "\ufeff" + output.getvalue()
+        filename = f"Attendance_{employee_id}_{month_str}.csv"
+
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+
+    except Exception as e:
+        print(f"Report Download Error: {e}", flush=True)
+        return f"Server Error while generating report: {str(e)}", 500
 
 
 # ---------------- EMPLOYEE HOME ----------------
@@ -580,12 +603,16 @@ def mark_attendance():
                 "date": today,
                 "morning": 0,
                 "afternoon": 0,
+                "morning_time": "",
+                "afternoon_time": "",
                 "status": "Absent",
                 "logout_time": ""
             }
             record_resp = supabase.table("attendance").insert(init_data).execute()
             if not record_resp.data:
+                print(f"DEBUG Error: Failed to initialize attendance for {employee_id} on {today}", flush=True)
                 return jsonify({"message": "Failed to initialize attendance record.", "status": "Error"}), 500
+            print(f"DEBUG: Initialized attendance record for {employee_id} - {today}", flush=True)
             record = record_resp.data[0]
 
         # 4. Marking Logic
@@ -604,7 +631,7 @@ def mark_attendance():
                 success = False
             elif val_now <= morning_deadline_val:
                 update_data["morning"] = 1
-                # update_data["morning_time"] = now.strftime("%H:%M:%S")
+                update_data["morning_time"] = now.strftime("%H:%M:%S")
                 message = "Morning attendance marked"
                 record["morning"] = 1
             else:
@@ -620,7 +647,7 @@ def mark_attendance():
                 success = False
             elif val_now <= afternoon_deadline_val:
                 update_data["afternoon"] = 1
-                # update_data["afternoon_time"] = now.strftime("%H:%M:%S")
+                update_data["afternoon_time"] = now.strftime("%H:%M:%S")
                 message = "Afternoon attendance marked"
                 record["afternoon"] = 1
             else:
@@ -640,6 +667,7 @@ def mark_attendance():
                 status = "Absent"
             
             update_data["status"] = status
+            print(f"DEBUG: Updating attendance for {employee_id} on {today} with {update_data}", flush=True)
             supabase.table("attendance").update(update_data).eq("employee_id", employee_id).eq("date", today).execute()
 
         return jsonify({

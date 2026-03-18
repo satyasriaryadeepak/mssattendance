@@ -94,8 +94,8 @@
                         <tr>
                             <th>S.No</th>
                             <th>Date</th>
-                            <th>Login</th>
-                            <th>Break</th>
+                            <th>Morning</th>
+                            <th>Afternoon</th>
                             <th>Logout</th>
                             <th>Status</th>
                         </tr>
@@ -105,8 +105,8 @@
                         <tr>
                             <td>{{ loop.index }}</td>
                             <td>{{ row.date }}</td>
-                            <td>{{ row.login_time or '---' }}</td>
-                            <td>---</td>
+                            <td>{{ row.morning_time or '---' }}</td>
+                            <td>{{ row.afternoon_time or '---' }}</td>
                             <td>{{ row.logout_time or '---' }}</td>
                             <td>
                                 {% if row.status == 'Present' %}
