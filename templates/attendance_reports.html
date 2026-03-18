@@ -36,8 +36,27 @@
                 <h1>Attendance Reports</h1>
                 <p>Daily and monthly employee attendance records</p>
             </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 0.9em; color: var(--text-secondary);">Viewing: <strong>{{ selected_date }}</strong></span>
+                {% if selected_date != today %}
+                <a href="/admin/reports" class="secondary-btn" style="padding: 6px 14px; font-size: 0.85em;">← Today</a>
+                {% endif %}
+            </div>
         </div>
 
+        <!-- Select Date -->
+        <section class="glass-card" style="margin-bottom: 25px;">
+            <h3>Select Date</h3>
+            <p style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.9em;">
+                Choose a date to view the attendance report for all employees on that day.
+            </p>
+            <form method="GET" action="/admin/reports" class="modern-form-grid" style="grid-template-columns: 1fr auto;">
+                <input type="date" name="date" value="{{ selected_date }}" max="{{ today }}" required>
+                <button class="primary-btn" type="submit">View Report</button>
+            </form>
+        </section>
+
+        <!-- Download Monthly Report -->
         <section class="glass-card" style="margin-bottom: 25px;">
             <h3>Download Monthly Report</h3>
             <p style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.9em;">
@@ -132,6 +151,7 @@
             <input type="hidden" name="id" id="editRowId">
             <input type="hidden" name="employee_id" id="editEmployeeId">
             <input type="hidden" name="date" id="editDate">
+            <input type="hidden" name="selected_date" value="{{ selected_date }}">
             <p id="editEmpName" style="font-weight: 600; margin-bottom: 20px; color: var(--primary);"></p>
             
             <div class="form-group" style="margin-bottom: 15px;">

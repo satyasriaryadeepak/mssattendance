@@ -340,19 +340,24 @@ def attendance_reports():
     if session.get("role") != "admin":
         return redirect(url_for("home"))
 
-    # Select date (default to today)
     today = get_now_ist().strftime("%Y-%m-%d")
+
+    # Accept a ?date= query param; validate and fall back to today if invalid
+    selected_date = request.args.get("date", today).strip()
+    try:
+        datetime.strptime(selected_date, "%Y-%m-%d")
+    except ValueError:
+        selected_date = today
     
-    # Check holiday
-    holiday = is_holiday(today)
+    # Check holiday for the selected date
+    holiday = is_holiday(selected_date)
     
     # Get all active employees
     emp_resp = supabase.table("employees").select("employee_id, name").eq("status", "active").order("name").execute()
     all_employees = emp_resp.data if emp_resp.data else []
     
-    # Get attendance records for today (or selected date filter)
-    # Note: If adding date filters in UI, this would use a requested date instead of 'today'
-    att_resp = supabase.table("attendance").select("*").eq("date", today).execute()
+    # Get attendance records for the selected date
+    att_resp = supabase.table("attendance").select("*").eq("date", selected_date).execute()
     att_map = {a["employee_id"]: a for a in att_resp.data} if att_resp.data else {}
 
     # Merge: ensure every active employee is represented
@@ -360,19 +365,17 @@ def attendance_reports():
     for emp in all_employees:
         eid = emp["employee_id"]
         if eid in att_map:
-            # Existing record
             record = att_map[eid]
-            record["name"] = emp["name"] # Ensure name is present
+            record["name"] = emp["name"]
             if holiday:
                 record["status"] = "Holiday"
             final_records.append(record)
         else:
-            # Virtual record for Absent/Holiday employees
             final_records.append({
-                "id": None, 
+                "id": None,
                 "employee_id": eid,
                 "name": emp["name"],
-                "date": today,
+                "date": selected_date,
                 "morning": 0,
                 "afternoon": 0,
                 "morning_time": "-",
@@ -381,8 +384,25 @@ def attendance_reports():
                 "logout_time": "-"
             })
 
-    # Sort so Present employees are at top, or just follow original alphabetical order
-    return render_template("attendance_reports.html", records=final_records, employees=all_employees)
+    # Finalize status for report display:
+    # morning-only records are stored as "Present" live, but finalize to "Half Day"
+    # if the afternoon deadline has passed (or if it's a past date entirely).
+    now_ist = get_now_ist()
+    afternoon_deadline_str = "14:10"
+    is_past_day = (selected_date < today)
+    afternoon_passed = is_past_day or (now_ist.strftime("%H:%M") > afternoon_deadline_str)
+
+    for r in final_records:
+        if r["morning"] == 1 and r["afternoon"] == 0 and afternoon_passed:
+            r["status"] = "Half Day"
+
+    return render_template(
+        "attendance_reports.html",
+        records=final_records,
+        employees=all_employees,
+        selected_date=selected_date,
+        today=today
+    )
 
 
 @app.route("/admin/save_attendance", methods=["POST"])
@@ -397,6 +417,8 @@ def save_attendance():
     morning_time = request.form.get("morning_time", "").strip()
     afternoon_time = request.form.get("afternoon_time", "").strip()
     logout_time = request.form.get("logout_time", "").strip()
+    # Preserve the date the admin was viewing so we redirect back to it
+    selected_date = request.form.get("selected_date", "").strip()
 
     # Recalculate status
     if morning == 1 and afternoon == 1:
@@ -430,7 +452,9 @@ def save_attendance():
     except Exception as e:
         print(f"Error saving attendance: {e}", flush=True)
 
-    return redirect(url_for("attendance_reports"))
+    # Redirect back to the same date the admin was viewing
+    redirect_date = selected_date if selected_date else date
+    return redirect(url_for("attendance_reports", date=redirect_date))
 
 
 @app.route("/admin/edit_attendance/<int:id>", methods=["POST"])
@@ -658,10 +682,16 @@ def mark_attendance():
 
         # 5. Perform Update and Status Calculation
         if update_data:
-            # Recalculate status
+            # Status logic:
+            # Both marked     → Present
+            # Morning only    → Present (live; finalizes to Half Day after afternoon deadline)
+            # Afternoon only  → Half Day
+            # Neither         → Absent
             if record["morning"] == 1 and record["afternoon"] == 1:
                 status = "Present"
-            elif record["morning"] == 1 or record["afternoon"] == 1:
+            elif record["morning"] == 1 and record["afternoon"] == 0:
+                status = "Present"  # Live status; becomes Half Day at end of day
+            elif record["morning"] == 0 and record["afternoon"] == 1:
                 status = "Half Day"
             else:
                 status = "Absent"
@@ -709,18 +739,21 @@ def get_attendance_status():
     morning_deadline = "10:10"
     afternoon_deadline = "14:10"
 
-    # If no record, calculate what it should be based on deadlines
     if record:
         morning = record["morning"]
         afternoon = record["afternoon"]
-        status = record["status"]
+        # Finalize morning-only to Half Day if afternoon deadline has passed
+        if morning == 1 and afternoon == 0 and current_time > afternoon_deadline:
+            status = "Half Day"
+        else:
+            status = record["status"]
     else:
         morning = 0
         afternoon = 0
         if current_time > afternoon_deadline:
             status = "Absent"
         elif current_time > morning_deadline:
-            status = "Half Day" # Potentially, if they miss morning
+            status = "Absent"  # Missed morning mark window
         else:
             status = "Pending"
 
