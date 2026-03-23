@@ -36,8 +36,8 @@ def is_holiday(date_str):
         return None
 
 # --- Attendance Configuration ---
-OFFICE_LAT = 17.4520
-OFFICE_LNG = 78.3926
+OFFICE_LAT = 17.452069
+OFFICE_LNG = 78.392615
 OFFICE_RANGE_METERS = 40
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -367,6 +367,10 @@ def attendance_reports():
     # Check holiday for the selected date
     holiday = is_holiday(selected_date)
     
+    # Check if selected date is a Sunday
+    selected_dt = datetime.strptime(selected_date, "%Y-%m-%d")
+    is_sunday = selected_dt.weekday() == 6
+    
     # Get all active employees
     emp_resp = supabase.table("employees").select("employee_id, name").eq("status", "active").order("name").execute()
     all_employees = emp_resp.data if emp_resp.data else []
@@ -386,6 +390,14 @@ def attendance_reports():
                 record["status"] = "Holiday"
             final_records.append(record)
         else:
+            # Virtual record logic
+            if is_sunday:
+                status_val = "Present"
+            elif holiday:
+                status_val = "Holiday"
+            else:
+                status_val = "Absent"
+
             final_records.append({
                 "id": None,
                 "employee_id": eid,
@@ -395,7 +407,7 @@ def attendance_reports():
                 "afternoon": 0,
                 "morning_time": "-",
                 "afternoon_time": "-",
-                "status": "Holiday" if holiday else "Absent",
+                "status": status_val,
                 "logout_time": "-"
             })
 
@@ -506,6 +518,16 @@ def download_report():
         start_date = f"{month_str}-01"
         last_day = calendar.monthrange(year, month)[1]
         end_date = f"{month_str}-{last_day:02d}"
+        # Get earliest attendance date as "created day"
+        first_rec_resp = (
+            supabase.table("attendance")
+            .select("date")
+            .eq("employee_id", employee_id)
+            .order("date", desc=False)
+            .limit(1)
+            .execute()
+        )
+        first_date_str = first_rec_resp.data[0]["date"] if first_rec_resp.data else end_date
 
         records_resp = (
             supabase.table("attendance")
@@ -544,6 +566,11 @@ def download_report():
         for day in range(1, last_day + 1):
             date_obj = datetime(year, month, day)
             date_str = date_obj.strftime("%Y-%m-%d")
+            
+            # Skip dates before the employee's "created day"
+            if date_str < first_date_str:
+                continue
+
             weekday = date_obj.weekday()  # 0=Monday, 6=Sunday
 
             if date_str in existing_records:
@@ -655,7 +682,7 @@ def mark_attendance():
         
         # 1. Sunday Check
         if now.weekday() == 6: # Sunday
-            return jsonify({"message": "Today is Sunday, a holiday", "status": "Error"}), 400
+            return jsonify({"message": "Today is Sunday. You are automatically marked as Present.", "status": "Error"}), 400
         
         # 2. Geolocation Check
         if not lat or not lng:
@@ -792,10 +819,10 @@ def get_attendance_status():
     now = get_now_ist()
     if now.weekday() == 6: # Sunday
         return jsonify({
-            "morning": 0,
-            "afternoon": 0,
-            "status": "Holiday (Sunday)",
-            "message": "Today is Sunday, a holiday"
+            "morning": 1, 
+            "afternoon": 1,
+            "status": "Present",
+            "message": "Today is Sunday. You are automatically marked as Present."
         })
 
     current_time = now.strftime("%H:%M")
@@ -836,26 +863,111 @@ def profile():
         return redirect(url_for("home"))
 
     employee_id = session.get("employee_id")
-
+    now = get_now_ist()
+    today_str = now.strftime("%Y-%m-%d")
+    year = now.year
+    month = now.month
+    
     # Get employee details
     emp_resp = supabase.table("employees").select("*").eq("employee_id", employee_id).execute()
     employee = emp_resp.data[0] if emp_resp.data else None
 
-    # Get attendance records
-    att_resp = supabase.table("attendance").select("*").eq("employee_id", employee_id).order("date", desc=True).execute()
-    records = att_resp.data
+    # Calculate month range
+    import calendar
+    last_day = calendar.monthrange(year, month)[1]
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month:02d}-{last_day:02d}"
 
-    # Aggregate statistics
-    present_resp = supabase.table("attendance").select("*", count="exact").eq("employee_id", employee_id).eq("status", "Present").execute()
-    present_count = present_resp.count
+    # Get attendance records for the month
+    att_resp = (
+        supabase.table("attendance")
+        .select("*")
+        .eq("employee_id", employee_id)
+        .gte("date", start_date)
+        .lte("date", end_date)
+        .execute()
+    )
+    existing_records = {row['date']: row for row in att_resp.data} if att_resp.data else {}
 
-    half_day_resp = supabase.table("attendance").select("*", count="exact").eq("employee_id", employee_id).eq("status", "Half Day").execute()
-    half_day_count = half_day_resp.count
+    # Get holidays for the month
+    holidays_resp = (
+        supabase.table("holidays")
+        .select("date, description")
+        .gte("date", start_date)
+        .lte("date", end_date)
+        .execute()
+    )
+    holidays_map = {h['date']: h['description'] for h in holidays_resp.data} if holidays_resp.data else {}
 
-    total_days_resp = supabase.table("attendance").select("*", count="exact").eq("employee_id", employee_id).execute()
-    total_days = total_days_resp.count
+    # Get earliest attendance date as "created day"
+    first_rec_resp = (
+        supabase.table("attendance")
+        .select("date")
+        .eq("employee_id", employee_id)
+        .order("date", desc=False)
+        .limit(1)
+        .execute()
+    )
+    first_date_str = first_rec_resp.data[0]["date"] if first_rec_resp.data else today_str
 
-    # Calculate percentage: (Present + 0.5 * Half Day) / Total
+    # Generate merged records list (from MAX(1st of month, first_date) to today)
+    merged_records = []
+    current_day = now.day
+    
+    present_count = 0
+    half_day_count = 0
+    total_days = 0 
+
+    # Loop from 1 to current_day to show report up to today
+    for d in range(1, current_day + 1):
+        date_obj = datetime(year, month, d)
+        d_str = date_obj.strftime("%Y-%m-%d")
+        
+        # Skip dates before the employee's "created day"
+        if d_str < first_date_str:
+            continue
+            
+        weekday = date_obj.weekday() # 0=Mon, 6=Sun
+        
+        total_days += 1
+        
+        if d_str in existing_records:
+            rec = existing_records[d_str]
+            status = rec.get("status", "Absent")
+            merged_records.append({
+                "date": d_str,
+                "morning_time": rec.get("morning_time", "-"),
+                "afternoon_time": rec.get("afternoon_time", "-"),
+                "logout_time": rec.get("logout_time", "-"),
+                "status": status
+            })
+            if status == "Present":
+                present_count += 1
+            elif status == "Half Day":
+                half_day_count += 1
+        else:
+            # Virtual record
+            if weekday == 6: # Sunday
+                status = "Present"
+                present_count += 1
+            elif d_str in holidays_map:
+                status = "Holiday" # Usually treated as present in some systems, but we'll show Holiday
+                # present_count += 1 # Uncomment if holidays count as present
+            else:
+                status = "Absent"
+                
+            merged_records.append({
+                "date": d_str,
+                "morning_time": "-",
+                "afternoon_time": "-",
+                "logout_time": "-",
+                "status": status
+            })
+
+    # Sort records descending (newest first)
+    merged_records.sort(key=lambda x: x['date'], reverse=True)
+
+    # Calculate percentage
     if total_days > 0:
         attendance_value = present_count + (0.5 * half_day_count)
         percentage = round((attendance_value / total_days) * 100)
@@ -865,7 +977,7 @@ def profile():
     return render_template(
         "profile.html",
         employee=employee,
-        records=records,
+        records=merged_records,
         present_count=present_count,
         half_day_count=half_day_count,
         total_days=total_days,
@@ -888,6 +1000,6 @@ def contact():
 # Already imported os at the top
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 5001))
     print(f"Starting server on port {port}...")
     app.run(host="0.0.0.0", port=port, debug=True)
