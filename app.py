@@ -116,15 +116,31 @@ def logout():
     record_logout = request.args.get("record") == "1"
     if record_logout and session.get("role") == "employee":
         employee_id = session.get("employee_id")
-        today = get_now_ist().strftime("%Y-%m-%d")
-        logout_time = get_now_ist().strftime("%H:%M:%S")
+        now = get_now_ist()
+        today = now.strftime("%Y-%m-%d")
+        logout_time_str = now.strftime("%H:%M:%S")
 
+        # Use select("*") to find the record
         response = supabase.table("attendance").select("*").eq("employee_id", employee_id).eq("date", today).execute()
         record = response.data[0] if response.data else None
 
         if record:
-            supabase.table("attendance").update({"logout_time": logout_time}).eq("employee_id", employee_id).eq("date", today).execute()
-            print(f"DEBUG: Logout recorded for {employee_id}", flush=True)
+            supabase.table("attendance").update({"logout_time": logout_time_str}).eq("employee_id", employee_id).eq("date", today).execute()
+        else:
+            # Create a record if none exists
+            init_data = {
+                "employee_id": employee_id,
+                "date": today,
+                "morning": 0,
+                "afternoon": 0,
+                "morning_time": "-",
+                "afternoon_time": "-",
+                "status": "Absent",
+                "logout_time": logout_time_str
+            }
+            supabase.table("attendance").insert(init_data).execute()
+            
+        print(f"DEBUG: Logout recorded for {employee_id} at {logout_time_str}", flush=True)
 
     session.clear()
     return redirect(url_for("home"))
