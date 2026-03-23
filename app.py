@@ -36,7 +36,22 @@ def is_holiday(date_str):
         return None
 
 # --- Attendance Configuration ---
-# Geofencing removed per user request
+OFFICE_LAT = 17.4520
+OFFICE_LNG = 78.3926
+OFFICE_RANGE_METERS = 40
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """Calculate the great circle distance between two points on the earth."""
+    # Convert decimal degrees to radians 
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+
+    # Haversine formula 
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a)) 
+    r = 6371000 # Radius of earth in meters. Use 3956 for miles
+    return c * r
 
 # Sqlite connection legacy (removed)
 # def get_db_connection():
@@ -501,7 +516,17 @@ def download_report():
             .order("date", desc=False)
             .execute()
         )
-        records = records_resp.data
+        existing_records = {row['date']: row for row in records_resp.data} if records_resp.data else {}
+
+        # Fetch holidays for the month
+        holidays_resp = (
+            supabase.table("holidays")
+            .select("date, description")
+            .gte("date", start_date)
+            .lte("date", end_date)
+            .execute()
+        )
+        holidays_map = {h['date']: h['description'] for h in holidays_resp.data} if holidays_resp.data else {}
 
         # Create CSV in memory
         output = io.StringIO()
@@ -515,28 +540,46 @@ def download_report():
         writer.writerow([])  # Empty row for spacing
         writer.writerow(['Date', 'Morning Status', 'Morning Time', 'Afternoon Status', 'Afternoon Time', 'Final Status', 'Logout Time'])
 
-        # Write data rows
-        for row in records:
-            morning_val = 'Marked' if row.get('morning') == 1 else 'Not Marked'
-            afternoon_val = 'Marked' if row.get('afternoon') == 1 else 'Not Marked'
-            morning_time_val = row.get('morning_time') or 'N/A'
-            afternoon_time_val = row.get('afternoon_time') or 'N/A'
-            logout_val = row.get('logout_time') or 'N/A'
+        # Generate all dates for the month
+        for day in range(1, last_day + 1):
+            date_obj = datetime(year, month, day)
+            date_str = date_obj.strftime("%Y-%m-%d")
+            weekday = date_obj.weekday()  # 0=Monday, 6=Sunday
+
+            if date_str in existing_records:
+                # Existing record from DB
+                row = existing_records[date_str]
+                morning_val = 'Marked' if row.get('morning') == 1 else 'Not Marked'
+                afternoon_val = 'Marked' if row.get('afternoon') == 1 else 'Not Marked'
+                morning_time_val = row.get('morning_time') or 'N/A'
+                afternoon_time_val = row.get('afternoon_time') or 'N/A'
+                status_val = row.get('status', 'N/A')
+                logout_val = row.get('logout_time') or 'N/A'
+            else:
+                # Virtual record logic
+                morning_val = 'N/A'
+                afternoon_val = 'N/A'
+                morning_time_val = 'N/A'
+                afternoon_time_val = 'N/A'
+                logout_val = 'N/A'
+
+                if weekday == 6: # Sunday
+                    status_val = 'Present'
+                elif date_str in holidays_map:
+                    status_val = 'Holiday'
+                else:
+                    status_val = 'Absent'
 
             # Format date for better Excel compatibility
-            raw_date = str(row['date'])
-            try:
-                parsed_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d %b %Y")
-            except Exception:
-                parsed_date = raw_date
+            formatted_date = date_obj.strftime("%d %b %Y")
 
             writer.writerow([
-                parsed_date,
+                formatted_date,
                 morning_val,
                 morning_time_val,
                 afternoon_val,
                 afternoon_time_val,
-                row.get('status', 'N/A'),
+                status_val,
                 logout_val
             ])
 
@@ -614,7 +657,27 @@ def mark_attendance():
         if now.weekday() == 6: # Sunday
             return jsonify({"message": "Today is Sunday, a holiday", "status": "Error"}), 400
         
-        # 2. Skip Geolocation (Removed per user request)
+        # 2. Geolocation Check
+        if not lat or not lng:
+            return jsonify({"message": "Location access is required to mark attendance.", "status": "Error"}), 400
+            
+        try:
+            user_lat = float(lat)
+            user_lng = float(lng)
+            distance = calculate_distance(user_lat, user_lng, OFFICE_LAT, OFFICE_LNG)
+            
+            print(f"DEBUG: User Location: {user_lat}, {user_lng} | Distance: {distance:.2f}m", flush=True)
+            
+            if distance > OFFICE_RANGE_METERS:
+                office_map_url = f"https://www.google.com/maps/search/?api=1&query={OFFICE_LAT},{OFFICE_LNG}"
+                return jsonify({
+                    "message": f"You are out of range ({distance:.1f}m). Please be within {OFFICE_RANGE_METERS}m of the office.",
+                    "status": "OutOfRange",
+                    "distance": distance,
+                    "map_url": office_map_url
+                }), 400
+        except ValueError:
+            return jsonify({"message": "Invalid location data received.", "status": "Error"}), 400
 
         # 3. Get or Initialize record
         att_resp = supabase.table("attendance").select("*").eq("employee_id", employee_id).eq("date", today).execute()

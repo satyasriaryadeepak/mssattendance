@@ -77,7 +77,7 @@
 
     <!-- FULL MAIN SECTION -->
         {% if holiday %}
-        <div class="glass-card holiday-alert" style="border: 2px border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 30px; background: rgba(59, 130, 246, 0.1);">
+        <div class="glass-card holiday-alert" style="border: 2px solid #3b82f6; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 30px; background: rgba(59, 130, 246, 0.1);">
             <h2 style="color: #3b82f6; margin-bottom: 10px;">🎉 Today is a Holiday: {{ holiday.description }}</h2>
             <p>The system has automatically marked you as present. You do not need to mark attendance today.</p>
         </div>
@@ -244,19 +244,63 @@ function markAttendance(period) {
     
     if (serverMsg) serverMsg.style.display = 'none';
     if (msgDiv) {
-        msgDiv.innerText = 'Communicating with server...';
+        msgDiv.innerText = 'Acquiring location...';
         msgDiv.style.display = 'block';
         msgDiv.style.background = '#eff6ff'; // Light blue info
     }
 
     const originalText = btn ? btn.innerText : '';
     if (btn) {
-        btn.innerText = 'Loading...';
+        btn.innerText = 'Locating...';
         btn.style.pointerEvents = 'none';
     }
 
-    // Directly send request without geolocation
-    sendAttendanceRequest(period, null, null, btn, originalText, msgDiv);
+    if (!navigator.geolocation) {
+        if (msgDiv) {
+            msgDiv.innerText = 'Geolocation is not supported by your browser.';
+            msgDiv.style.background = '#fee2e2';
+            msgDiv.style.color = '#991b1b';
+        }
+        if (btn) {
+            btn.innerText = originalText;
+            btn.style.pointerEvents = 'auto';
+        }
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv);
+        },
+        (error) => {
+            console.error('Geolocation error:', error);
+            let errorMsg = 'Unable to retrieve your location.';
+            if (error.code === error.PERMISSION_DENIED) {
+                errorMsg = 'Location permission denied. Please enable location to mark attendance.';
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+                errorMsg = 'Location information is unavailable.';
+            } else if (error.code === error.TIMEOUT) {
+                errorMsg = 'Location request timed out.';
+            }
+
+            if (msgDiv) {
+                msgDiv.innerText = errorMsg;
+                msgDiv.style.background = '#fee2e2';
+                msgDiv.style.color = '#991b1b';
+            }
+            if (btn) {
+                btn.innerText = originalText;
+                btn.style.pointerEvents = 'auto';
+            }
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
 }
 
 function sendAttendanceRequest(period, lat, lng, btn, originalText, msgDiv) {
